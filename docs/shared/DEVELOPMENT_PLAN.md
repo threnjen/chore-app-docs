@@ -208,6 +208,7 @@ Monitoring:
 ---
 
 ## Multi-Household Architecture
+**[Backend + Frontend]**
 
 ### Problem Statement
 Children in divorced/separated families need to:
@@ -389,6 +390,7 @@ Get chore completion statistics
 ---
 
 ## Chore Scheduling System
+**[Backend]**
 
 ### Problem Statement
 FamZoo's chore scheduler had critical limitations:
@@ -608,6 +610,7 @@ scheduler.add_job(
 ---
 
 ## Age-Adaptive UI System
+**[Frontend]**
 
 ### Problem Statement
 Kids of different ages have vastly different:

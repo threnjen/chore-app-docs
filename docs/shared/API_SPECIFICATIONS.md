@@ -1,3 +1,7 @@
+# API Specifications
+
+> **Source of Truth**: The backend repository (`chore-app-backend`) is the authoritative source for API implementation. This document serves as the contract between frontend and backend services.
+
 ### API Conventions
 
 **Base URL**: `https://api.picklesapp.com/api/v1`
