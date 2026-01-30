@@ -395,8 +395,11 @@ curl -X GET "$API_URL/accounts" \
 ```bash
 cd chore-app-backend
 
+# build container if needed
+docker-compose up -d
+
 # Run all tests
-docker-compose exec api pytest
+docker-compose exec api pytest -v
 
 # Run with coverage
 docker-compose exec api pytest --cov=app --cov-report=html
@@ -412,6 +415,9 @@ docker-compose exec api pytest tests/test_auth.py::test_register_success -v
 
 ```bash
 cd chore-app-frontend
+
+# install npm if needed
+npm install
 
 # Run unit tests
 npm run test
