@@ -14,7 +14,7 @@ Authorization: Bearer <JWT_TOKEN>
 **Request Headers**:
 ```
 Content-Type: application/json
-X-Family-Context: <family_id>  // Required for family-scoped operations
+X-Family-Id: <family_id>  // Required for family-scoped operations
 ```
 
 **Response Format**:

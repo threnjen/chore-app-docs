@@ -1104,28 +1104,35 @@ PARENTING_PRESETS = {
 
 ## Development Phases
 
-### Phase 1: Foundation + Social Auth (2-3 weeks)
+### Phase 1: Foundation + Email/Password Auth (2-3 weeks)
 
 **Goals:**
-- Local development environment
-- Basic authentication (JWT + social)
+- Local development environment (Docker for all services including PostgreSQL)
+- Basic email/password authentication with JWT
 - Multi-household data models
 - Manual transaction system
+- OAuth endpoints stubbed (returns 501 Not Implemented)
+
+**Infrastructure Decision:**
+- Docker PostgreSQL for **all developers** (cross-platform consistency)
+- Backend owns PostgreSQL container; frontend connects via API proxy
+- WSL assumed for Windows developers
 
 **Deliverables:**
 1. **Infrastructure**
    - Docker setup (frontend/backend containers)
-   - Native PostgreSQL installation guide
+   - **Docker PostgreSQL 15** (not native install - cross-platform)
    - docker-compose.yml with hot reload
    - Environment configuration (.env files)
+   - Named volume for PostgreSQL data persistence
 
 2. **Backend (FastAPI)**
    - Project structure with app/ directory
    - SQLAlchemy models (User, Family, FamilyMembership, Account, Transaction)
    - Alembic migrations setup
-   - JWT authentication with refresh tokens
-   - OAuth 2.0 integration (Google, Apple, Facebook)
-   - Multi-tenant middleware (family context injection)
+   - JWT authentication with refresh tokens (1-hour access, 30-day refresh)
+   - **OAuth endpoints stubbed** (return 501, real implementation in Phase 6)
+   - Multi-tenant middleware (family context via X-Family-Id header)
    - Account CRUD endpoints
    - Manual transaction endpoints
    - OpenAPI documentation
@@ -1133,16 +1140,16 @@ PARENTING_PRESETS = {
 3. **Frontend (React + Vite)**
    - Project scaffolding with Vite
    - React Router setup
-   - Authentication flows (login, register, social auth)
+   - Authentication flows (login, register) - **email/password only**
+   - OAuth buttons present but disabled with "Coming Soon" messaging
    - Family context switching UI
    - Account list/detail views
    - Manual transaction forms
-   - Basic responsive layout
+   - Basic responsive layout with age-adaptive CSS variables
 
 4. **Database**
-   - PostgreSQL 15+ installation
-   - Schema creation scripts
-   - Row-Level Security policies
+   - **PostgreSQL 15 via Docker** (not native installation)
+   - Schema creation via Alembic migrations
    - Test data seeders (4 test families with multi-household scenario)
 
 **Testing:**
@@ -1152,9 +1159,9 @@ PARENTING_PRESETS = {
 - 100% coverage for money transactions
 
 **Documentation:**
-- README with setup instructions
-- API documentation (auto-generated)
-- PostgreSQL installation guide (macOS/Homebrew)
+- README with Docker setup instructions
+- API documentation (auto-generated via FastAPI)
+- No native PostgreSQL installation needed
 
 ---
 
@@ -1341,9 +1348,10 @@ PARENTING_PRESETS = {
 
 ---
 
-### Phase 6: Goals & Advanced Features (2 weeks)
+### Phase 6: Goals, OAuth & Advanced Features (2-3 weeks)
 
 **Goals:**
+- **OAuth 2.0 authentication** (Google, Apple, Facebook)
 - Savings goals tracking
 - Budget worksheets
 - Loan tracking
@@ -1351,6 +1359,8 @@ PARENTING_PRESETS = {
 
 **Deliverables:**
 1. **Backend**
+   - **OAuth 2.0 integration** (Google, Apple, Facebook via authlib)
+   - Account linking (connect social to existing email account)
    - SavingsGoal, Budget, Loan models
    - Goal progress calculations
    - Budget tracking
@@ -1360,6 +1370,8 @@ PARENTING_PRESETS = {
    - WebSocket support (Socket.io)
 
 2. **Frontend**
+   - **OAuth login buttons** (Google, Apple, Facebook)
+   - Account linking UI
    - Savings goal creation/tracking UI
    - Progress visualization (progress bars, charts)
    - Budget worksheet
@@ -1368,6 +1380,8 @@ PARENTING_PRESETS = {
    - Real-time notification badges (WebSocket)
 
 3. **Features**
+   - **Social login/registration**
+   - **Link social accounts to existing account**
    - Visual goal progress
    - Target date projections
    - Budget categories
@@ -1378,6 +1392,8 @@ PARENTING_PRESETS = {
    - Real-time chore completion updates
 
 **Testing:**
+- **OAuth flow tests** (mock providers)
+- **Account linking tests**
 - Goal progress calculation tests
 - Budget tracking tests
 - Email delivery tests
