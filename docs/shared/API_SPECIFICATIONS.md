@@ -70,7 +70,8 @@ Request:
 {
   "email": "parent@example.com",
   "password": "securepassword123",
-  "name": "Jane Doe",
+  "first_name": "Jane",
+  "last_name": "Doe",
   "role": "PARENT",
   "birthdate": "1985-05-15" // Optional for parents
 }
@@ -82,7 +83,8 @@ Response:
     "user": {
       "id": "uuid",
       "email": "parent@example.com",
-      "name": "Jane Doe",
+      "first_name": "Jane",
+      "last_name": "Doe",
       "role": "PARENT"
     },
     "access_token": "jwt_token",
@@ -211,7 +213,8 @@ Request:
 {
   "user_id": "existing_user_uuid", // If adding existing user to family
   "email": "child@example.com", // If creating new user
-  "name": "Emma Smith",
+  "first_name": "Emma",
+  "last_name": "Smith",
   "role": "CHILD",
   "birthdate": "2015-03-10",
   "parenting_preset": "balanced" // Applies age-appropriate defaults
@@ -225,7 +228,8 @@ Response:
       "id": "uuid",
       "user": {
         "id": "uuid",
-        "name": "Emma Smith",
+        "first_name": "Emma",
+        "last_name": "Smith",
         "age": 10,
         "age_bracket": "tween"
       },

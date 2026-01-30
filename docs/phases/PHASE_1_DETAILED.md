@@ -1,8 +1,9 @@
 # Phase 1: Foundation Implementation Guide
 
 **Estimated Duration**: 2-3 weeks  
-**Status**: In Progress  
+**Status**: ✅ Complete  
 **Last Updated**: January 30, 2026
+**Completed**: January 30, 2026
 
 ---
 
@@ -91,15 +92,14 @@ chore-app-backend/
 │   │   ├── family_service.py
 │   │   ├── account_service.py
 │   │   └── transaction_service.py
-│   └── middleware/
-│       ├── __init__.py
-│       └── family_context.py
 └── tests/
     ├── __init__.py
     ├── conftest.py
     ├── test_auth.py
     ├── test_accounts.py
-    └── test_transactions.py
+    ├── test_families.py
+    ├── test_transactions.py
+    └── test_users.py
 ```
 
 ### chore-app-frontend
@@ -427,34 +427,35 @@ class UserUpdate(BaseModel):
 
 **Acceptance Criteria:**
 
-- [ ] Transactions update account balance atomically
-- [ ] Negative balance validation respects account settings
-- [ ] Family context middleware filters results
-- [ ] Parents can view all family accounts
-- [ ] Children only see their own accounts
+- [x] Transactions update account balance atomically
+- [x] Negative balance validation respects account settings
+- [x] Family context dependency filters results
+- [x] Parents can view all family accounts
+- [x] Children only see their own accounts
 
 ---
 
-### 9. Multi-Tenant Middleware
+### 9. Multi-Tenant Family Context
 
-**Files to create:**
+**Implementation:** FastAPI dependency injection (in `app/dependencies.py`)
 
-- [ ] `app/middleware/__init__.py`
-- [ ] `app/middleware/family_context.py`
+> **Note:** Family context is implemented as a FastAPI dependency rather than middleware.
+> This is the preferred pattern for FastAPI as it integrates with the type system and
+> allows per-route opt-in rather than global application.
 
 **Behavior:**
 
 1. Extract `X-Family-Id` header from request
 2. Verify user is member of family
-3. Inject `family_id` into request state
-4. All queries filter by `family_id`
+3. Return `family_id` as typed UUID dependency
+4. All routes use `FamilyContext` dependency for family-scoped operations
 
 **Acceptance Criteria:**
 
-- [ ] Missing header returns 400
-- [ ] Invalid family returns 403
-- [ ] User not in family returns 403
-- [ ] Valid header sets `request.state.family_id`
+- [x] Missing header returns 400
+- [x] Invalid family UUID format returns 400
+- [x] User not in family returns 403
+- [x] Valid header returns typed UUID for use in route handlers
 
 ---
 
@@ -640,16 +641,17 @@ npm test
 
 Phase 1 is complete when:
 
-- [ ] Both repos have working Docker setup
-- [ ] User can register with email/password
-- [ ] User can login and receive JWT tokens
-- [ ] User can create a family
-- [ ] User can create accounts within family
-- [ ] User can create manual transactions
-- [ ] Account balances update correctly
-- [ ] Multi-household switching works
-- [ ] All tests pass with target coverage
-- [ ] OpenAPI docs accessible at `/docs`
+- [x] Both repos have working Docker setup
+- [x] User can register with email/password
+- [x] User can login and receive JWT tokens
+- [x] User can create a family
+- [x] User can create accounts within family
+- [x] User can create manual transactions
+- [x] Account balances update correctly
+- [x] Transaction audit trail with `balance_after` field
+- [x] Multi-household switching works
+- [x] All tests pass with target coverage
+- [x] OpenAPI docs accessible at `/docs`
 
 ---
 

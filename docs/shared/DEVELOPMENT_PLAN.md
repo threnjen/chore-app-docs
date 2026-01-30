@@ -224,7 +224,7 @@ Children in divorced/separated families need to:
 
 ```python
 # User can belong to multiple families via family_memberships
-User (id, email, password_hash, name, birthdate, role: PARENT/CHILD)
+User (id, email, password_hash, first_name, last_name, birthdate, role: PARENT/CHILD)
   ↓
 FamilyMembership (id, user_id, family_id, role, is_active, joined_at)
   ↓
