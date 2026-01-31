@@ -1145,7 +1145,7 @@ PARENTING_PRESETS = {
    - Family context switching UI
    - Account list/detail views
    - Manual transaction forms
-   - Basic responsive layout with age-adaptive CSS variables
+   - Desktop-first layout (responsive design deferred to Phase 7 - requires AWS deployment for mobile testing)
 
 4. **Database**
    - **PostgreSQL 15 via Docker** (not native installation)
@@ -1403,9 +1403,12 @@ PARENTING_PRESETS = {
 
 ### Phase 7: Age-Adaptive Mobile UI (2-3 weeks)
 
+> **Prerequisite**: Requires AWS deployment (Phase 6) for mobile device testing with secure HTTPS access.
+
 **Goals:**
 - Age-bracket UI system
 - Mobile PWA optimization
+- Responsive design testing and refinement
 - Feature gating
 
 **Deliverables:**

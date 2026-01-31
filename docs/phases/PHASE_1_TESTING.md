@@ -238,50 +238,76 @@
 
 ### Prerequisites
 
-- [ ] Docker Desktop running
-- [ ] Backend started (`docker-compose up`)
-- [ ] Database migrated (`alembic upgrade head`)
-- [ ] Frontend started (`npm run dev`)
+- [x] Docker Desktop running
+- [x] Backend started (`docker-compose up`)
+- [x] Database migrated (`docker-compose exec api alembic upgrade head`)
+- [x] Load seed data in backed (`docker-compose exec api python scripts/seed_dev_data.py`)
+- [x] Frontend started (`npm run dev`) http://localhost:5173/
 - [ ] Seed data loaded (optional)
+
+### Resetting
+- `docker-compose down -v`
+- `docker-compose up -d`
+- `docker-compose exec api python scripts/seed_dev_data.py`
+
 
 ### Authentication
 
-- [ ] Can register new parent account
-- [ ] Cannot register with duplicate email
-- [ ] Can login with registered account
-- [ ] Cannot login with wrong password
+- [x] Can register new parent account
+- [x] Cannot register with duplicate email
+- [x] Can login with registered account
+- [x] Cannot login with wrong password
 - [ ] Token refreshes automatically when expired
-- [ ] Logout clears session
-- [ ] OAuth buttons show "Coming Soon" alert
+- [x] Logout clears session
+- [x] OAuth buttons show "Coming Soon" alert
 
 ### Family Management
 
-- [ ] New user prompted to create family
-- [ ] Can create family with valid name
-- [ ] User becomes OWNER of created family
-- [ ] Family switcher shows all memberships
-- [ ] Can switch between families (if multiple)
+- [x] New user prompted to create family
+- [x] Can create family with valid name
+- [x] User becomes OWNER of created family
+- [x] Family switcher shows all memberships
+- [x] Can switch between families (if multiple)
+
+### Child Account Management
+
+- [x] Can navigate to Family Members page from sidebar
+- [x] Family Members page shows current members with roles
+- [x] Parent can click "Add Child" button
+- [x] Can fill in child's email, first name, last name
+- [x] Can optionally set child's birthdate
+- [x] Child account is created with default password `TestPass123`
+- [x] Success message shows with password hint
+- [x] New child appears in Family Members list with "Child" badge
+- [x] Child can log in with their email and `TestPass123`
+- [x] Adding existing user to family shows appropriate message
+- [x] Cannot add user who is already a family member (shows error)
 
 ### Accounts
 
-- [ ] Can create new account (SPEND, SAVE, GIVE, INVEST types)
-- [ ] Account appears in list grouped by type
-- [ ] Account shows correct balance
-- [ ] Can view account details
-- [ ] Icons match account types
+- [x] Can navigate to create account page
+- [x] Can create new account (SPEND, SAVE, GIVE, INVEST types)
+- [x] Can select account owner from family members (including children)
+- [x] Account appears in list grouped by type
+- [x] Account shows correct balance
+- [x] Can view account details
+- [x] Icons match account types
 
 ### Transactions
 
-- [ ] Can create deposit (CREDIT)
-- [ ] Can create withdrawal (DEBIT)
-- [ ] Balance updates after transaction
-- [ ] Cannot overdraw without negative balance setting
-- [ ] Can transfer between accounts
-- [ ] Both balances update on transfer
-- [ ] Transaction appears in history
-- [ ] Can filter by transaction type
+- [x] Can navigate to create transaction page
+- [x] Can create deposit (CREDIT)
+- [x] Can create withdrawal (DEBIT)
+- [x] Balance updates after transaction
+- [x] Cannot overdraw without negative balance setting
+- [x] Can transfer between accounts (using transfer toggle)
+- [x] Both balances update on transfer
+- [x] Transaction appears in history
+- [x] Can filter by transaction type
 
 ### Responsive Design
+
+> **Deferred to Later Phase**: Mobile testing requires physical device access. Responsive design testing will be completed in a future phase.
 
 - [ ] Login page renders on mobile
 - [ ] Dashboard layout adapts to mobile
@@ -395,8 +421,11 @@ curl -X GET "$API_URL/accounts" \
 ```bash
 cd chore-app-backend
 
-# build container if needed
+# Build and start containers
 docker-compose up -d
+
+# Run migrations (first time or after pulling new migrations)
+docker-compose exec api alembic upgrade head
 
 # Run all tests
 docker-compose exec api pytest -v

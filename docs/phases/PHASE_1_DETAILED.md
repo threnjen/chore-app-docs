@@ -19,6 +19,7 @@ Phase 1 establishes the foundation for PicklesApp: Docker-based local developmen
 | Auth Method | Email/password first | Simpler MVP, OAuth deferred to Phase 6 |
 | Docker Strategy | Separate per-repo | Backend owns DB, frontend is standalone |
 | Windows Support | WSL required | Consistent Unix-like environment |
+| Responsive Design | Deferred to Phase 7 | Requires AWS deployment for mobile device testing |
 
 ---
 
