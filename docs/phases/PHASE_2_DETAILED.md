@@ -1789,3 +1789,203 @@ See [PHASE_2_TESTING.md](./PHASE_2_TESTING.md) for complete test scenarios.
 - [ ] All frontend tests passing
 - [ ] E2E tests for chore workflows passing
 - [ ] Documentation updated
+
+---
+
+## Phase 1 Amendment: Bidirectional Family Building
+
+**Added**: During Phase 2 development  
+**Status**: ✅ Complete
+
+### Overview
+
+This amendment adds enhanced registration flow and bidirectional family building, which was identified as a missing Phase 1 component. Users can now:
+
+1. **Self-register with age-based role determination** - Birth year determines PARENT (18+) or CHILD (<18) role
+2. **Children can request to join families** - Instead of only parents inviting children
+3. **Adults can create OR join families** - Option to join existing family via parent email
+4. **Email verification required** - Must verify email before join requests can be approved
+
+### Database Changes
+
+#### Migration 005: Extend Invitations Table
+
+```sql
+-- New enums
+CREATE TYPE invitationtype AS ENUM ('INVITE', 'JOIN_REQUEST');
+CREATE TYPE invitationstatus AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED', 'EXPIRED');
+
+-- New columns on invitations table
+ALTER TABLE invitations ADD COLUMN invitation_type invitationtype NOT NULL DEFAULT 'INVITE';
+ALTER TABLE invitations ADD COLUMN status invitationstatus NOT NULL DEFAULT 'PENDING';
+ALTER TABLE invitations ADD COLUMN message TEXT;
+ALTER TABLE invitations ADD COLUMN reviewed_by_id UUID REFERENCES users(id);
+ALTER TABLE invitations ADD COLUMN reviewed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE invitations ADD COLUMN target_email VARCHAR(255);
+ALTER TABLE invitations ALTER COLUMN family_id DROP NOT NULL;  -- Allow null for pending join requests
+```
+
+#### Migration 006: User Verification Fields
+
+```sql
+ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN email_verification_token VARCHAR(64) UNIQUE;
+ALTER TABLE users ADD COLUMN birth_year INTEGER;
+```
+
+### API Changes
+
+#### Updated Endpoints
+
+| Endpoint | Change |
+|----------|--------|
+| `POST /auth/register` | Now requires `birth_year`, returns `RegistrationResponse` instead of tokens |
+
+#### New Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/verify-email` | POST | Verify email with token, returns tokens on success |
+| `/auth/resend-verification` | POST | Resend verification email |
+| `/join-requests` | POST | Create join request to a family |
+| `/me/join-requests` | GET | Get current user's join requests |
+| `/families/{id}/join-requests` | GET | List pending join requests (parents only) |
+| `/join-requests/{id}/review` | POST | Approve or reject a join request |
+| `/join-requests/{id}` | DELETE | Cancel a pending join request |
+
+### Registration Flow
+
+```
+User enters birth year
+         │
+         ▼
+    ┌────────────┐
+    │ Age >= 18? │
+    └────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+ PARENT     CHILD
+    │         │
+    ▼         ▼
+Optional   Required
+parent     parent
+email      email
+    │         │
+    ▼         ▼
+┌─────────────────────┐
+│  Create account     │
+│  (email unverified) │
+└─────────────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+Has parent  No parent
+  email       email
+    │         │
+    ▼         ▼
+Create     Create
+join       family
+request    (adult only)
+    │         │
+    ▼         ▼
+┌─────────────────────┐
+│ Send verification   │
+│ email to user       │
+└─────────────────────┘
+```
+
+### Join Request Flow
+
+```
+User creates join request
+         │
+         ▼
+    ┌─────────────────┐
+    │ Target email    │
+    │ registered?     │
+    └─────────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+   Yes        No
+    │         │
+    ▼         ▼
+Target has  Send
+ family?   registration
+    │      invitation
+    ▼         │
+   Yes        │
+    │         │
+    ▼         │
+Create join   │
+request for   │
+that family   │
+    │         │
+    ▼         │
+Notify all    │
+parents       │
+    │         │
+    ▼         ▼
+┌─────────────────────┐
+│ Wait for approval   │
+│ (30-day expiration) │
+└─────────────────────┘
+         │
+         ▼
+    ┌─────────────────┐
+    │ Parent reviews  │
+    │ request         │
+    └─────────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+Approve    Reject
+    │         │
+    ▼         ▼
+Check if   Notify
+requester  requester
+email      (can retry)
+verified
+    │
+    ▼
+Add to family
+& notify
+```
+
+### Email Templates (Stubbed in Dev Mode)
+
+| Template | Trigger | Recipients |
+|----------|---------|------------|
+| `send_verification_email` | User registers | New user |
+| `send_join_request_notification` | User creates join request | Parent(s) in target family |
+| `send_join_request_approved` | Parent approves request | Requester |
+| `send_join_request_rejected` | Parent rejects request | Requester |
+| `send_registration_invitation` | User requests join to unregistered email | Target email |
+
+### Frontend Changes
+
+| Component | Change |
+|-----------|--------|
+| `RegisterForm.jsx` | Multi-step: (1) birth year, (2) basic info, (3) family connection |
+| `RegisterPage.jsx` | Handles invitation token from URL |
+| `DashboardPage.jsx` | Shows pending join requests badge for parents |
+| `EmailVerificationPage.jsx` | New page for email verification flow |
+| `JoinRequestsPage.jsx` | New page for parents to review requests |
+| `App.jsx` | Added routes for `/verify-email/:token` and `/family/join-requests` |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AGE_THRESHOLD` | 18 | Age below which user is a CHILD |
+| Join request expiration | 30 days | Time before join request expires |
+| Invitation expiration | 7 days | Time before invitation expires |
+
+### Testing Notes
+
+- All email functions are stubbed in development mode (logged to console)
+- Birth year validation: 1900 to current year
+- Children must provide parent email during registration
+- Adults can optionally provide parent email to join existing family
+- Email verification is required before join request approval completes

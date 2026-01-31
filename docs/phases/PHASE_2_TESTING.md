@@ -835,6 +835,396 @@ async def seed_chores(db: AsyncSession, family: Family, parent: User, children: 
 
 ---
 
+## Phase 1 Amendment: Bidirectional Family Building Testing
+
+This section covers testing for the enhanced registration and join request functionality added during Phase 2.
+
+### Manual Testing Flow
+
+#### Prerequisites
+
+1. Backend server running: `uvicorn app.main:app --reload`
+2. Frontend dev server running: `npm run dev`
+3. Database migrated: `alembic upgrade head`
+4. Check DEV_MODE is enabled (emails will be logged, not sent)
+
+---
+
+### Test Scenario 1: Adult Registration (Create New Family)
+
+**Goal**: Verify an adult (18+) can register and automatically get a family created.
+
+**Steps**:
+
+1. Navigate to `http://localhost:5173/register`
+2. **Step 1 - Birth Year**:
+   - Select birth year: `2000` (adult, 26 years old)
+   - Click "Continue"
+3. **Step 2 - Basic Info**:
+   - Verify badge shows "👨‍👩‍👧 Parent Account"
+   - Enter:
+     - First name: `Test`
+     - Last name: `Parent`
+     - Email: `testparent@example.com`
+     - Password: `TestPass123`
+     - Confirm Password: `TestPass123`
+   - Click "Continue"
+4. **Step 3 - Family Connection**:
+   - Verify "Create a new family" is selected by default
+   - Click "Create Account"
+5. **Success Screen**:
+   - Verify success message appears
+   - Verify "Your family has been created!" message
+   - Verify "Please check your email to verify" message
+
+**Expected Results**:
+- User created with `role=PARENT`, `email_verified=false`
+- Family created with name "{LastName} Family"
+- User added as family OWNER
+- Verification email logged to console
+- User redirected to login page
+
+**Backend Verification**:
+```bash
+# Check user was created
+curl -s http://localhost:8000/api/v1/auth/me -H "Authorization: Bearer <token>" | jq
+
+# Check logs for verification email
+# Look for: [DEV MODE] Email would be sent: ... Subject: Verify your email address
+```
+
+---
+
+### Test Scenario 2: Adult Registration (Join Existing Family)
+
+**Goal**: Verify an adult can request to join an existing family.
+
+**Prerequisites**: Complete Test Scenario 1 first (need existing family)
+
+**Steps**:
+
+1. Navigate to `http://localhost:5173/register`
+2. **Step 1 - Birth Year**:
+   - Select birth year: `1995` (adult, 31 years old)
+   - Click "Continue"
+3. **Step 2 - Basic Info**:
+   - Enter:
+     - First name: `Other`
+     - Last name: `Parent`
+     - Email: `otherparent@example.com`
+     - Password: `TestPass123`
+     - Confirm Password: `TestPass123`
+   - Click "Continue"
+4. **Step 3 - Family Connection**:
+   - Select "Join an existing family" radio button
+   - Enter parent email: `testparent@example.com`
+   - Enter message: `Hi, I'm the other parent!`
+   - Click "Send Request"
+5. **Success Screen**:
+   - Verify "Your request to join has been sent" message
+
+**Expected Results**:
+- User created with `role=PARENT`, `email_verified=false`
+- Join request created with `status=PENDING`, `invitation_type=JOIN_REQUEST`
+- Notification email to target parent logged to console
+- User NOT added to family yet
+
+---
+
+### Test Scenario 3: Child Registration (Request to Join Parent)
+
+**Goal**: Verify a child (<18) must provide parent email and creates a join request.
+
+**Prerequisites**: Complete Test Scenario 1 first
+
+**Steps**:
+
+1. Navigate to `http://localhost:5173/register`
+2. **Step 1 - Birth Year**:
+   - Select birth year: `2015` (child, 11 years old)
+   - Click "Continue"
+3. **Step 2 - Basic Info**:
+   - Verify badge shows "🧒 Child Account"
+   - Enter:
+     - First name: `Test`
+     - Last name: `Child`
+     - Email: `testchild@example.com`
+     - Password: `TestPass123`
+     - Confirm Password: `TestPass123`
+   - Click "Continue"
+4. **Step 3 - Family Connection**:
+   - Verify NO option to create family (only parent email input)
+   - Enter parent email: `testparent@example.com`
+   - Enter message: `Hi Mom, it's me!`
+   - Click "Send Request"
+5. **Success Screen**:
+   - Verify "We've sent a request to your parent" message
+
+**Expected Results**:
+- User created with `role=CHILD`, `email_verified=false`
+- Join request created linking to parent's family
+- Notification email to parent logged
+- Child NOT added to family yet
+
+---
+
+### Test Scenario 4: Email Verification Flow
+
+**Goal**: Verify email verification works and returns tokens.
+
+**Prerequisites**: Complete any registration scenario
+
+**Steps**:
+
+1. Find verification token from console logs:
+   ```
+   [DEV MODE] Email would be sent:
+     To: testparent@example.com
+     Subject: Verify your email address
+     Body: ...verify-email/ABC123TOKEN...
+   ```
+2. Extract the token from the URL (e.g., `ABC123TOKEN`)
+3. Navigate to `http://localhost:5173/verify-email/ABC123TOKEN`
+4. **Verification Page**:
+   - Verify "Verifying your email..." spinner
+   - Verify "Email Verified!" success message
+   - Verify automatic redirect to dashboard
+
+**Expected Results**:
+- User's `email_verified` set to `true`
+- `email_verification_token` set to `null`
+- Access and refresh tokens returned
+- User redirected to dashboard
+
+**API Test**:
+```bash
+# Direct API test
+curl -X POST http://localhost:8000/api/v1/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"token": "ABC123TOKEN"}'
+```
+
+---
+
+### Test Scenario 5: Parent Reviews Join Requests
+
+**Goal**: Verify parent can see and approve/reject join requests.
+
+**Prerequisites**: 
+- Complete Test Scenario 1 (parent registered)
+- Complete Test Scenario 3 or 4 (child registered with join request)
+- Verify parent's email (Test Scenario 4)
+
+**Steps**:
+
+1. Login as parent: `testparent@example.com`
+2. Navigate to dashboard
+3. **Dashboard Notification**:
+   - Verify yellow notification card: "1 pending join request"
+   - Click the notification
+4. **Join Requests Page** (`/family/join-requests`):
+   - Verify pending request shows:
+     - Requester name and email
+     - Their message
+     - Created date
+     - Expiration (30 days from creation)
+5. **Approve Request**:
+   - Click "Approve" button
+   - **If child email not verified**: Verify error message about email verification
+   - **If child email verified**: Verify success message
+6. **Verify Child Added**:
+   - Navigate to Family Members page
+   - Verify child appears in member list
+
+**Expected Results (Approval)**:
+- Join request status changed to `ACCEPTED`
+- Child added to family as MEMBER
+- Approval email sent to child (logged)
+
+---
+
+### Test Scenario 6: Parent Rejects Join Request
+
+**Goal**: Verify rejection flow.
+
+**Prerequisites**: Create a new join request
+
+**Steps**:
+
+1. Register a new child (different email)
+2. Login as parent
+3. Go to Join Requests page
+4. Click "Reject" on the request
+5. Verify success message
+6. Verify request removed from list
+
+**Expected Results**:
+- Join request status changed to `REJECTED`
+- Rejection email sent to requester (logged)
+- Child can submit a new request if desired
+
+---
+
+### Test Scenario 7: Child with Unregistered Parent Email
+
+**Goal**: Verify registration invitation sent when parent email doesn't exist.
+
+**Steps**:
+
+1. Navigate to register page
+2. Complete registration as child (birth year 2014)
+3. Enter parent email that doesn't exist: `newparent@example.com`
+4. Submit registration
+
+**Expected Results**:
+- Child account created
+- Registration invitation email sent to `newparent@example.com` (logged)
+- Join request created with `family_id=null` (no family yet)
+- Message indicates parent will be invited
+
+**Console Log Check**:
+```
+[DEV MODE] Email would be sent:
+  To: newparent@example.com
+  Subject: Test Child wants you to join their family app!
+```
+
+---
+
+### Test Scenario 8: Resend Verification Email
+
+**Goal**: Verify resend verification works.
+
+**Steps**:
+
+1. Register a new user but don't verify
+2. Navigate to login page
+3. Try to use resend verification (or hit API directly)
+
+**API Test**:
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/resend-verification \
+  -H "Content-Type: application/json" \
+  -d '{"email": "unverified@example.com"}'
+```
+
+**Expected Results**:
+- New verification token generated
+- New verification email sent (logged)
+- Response always says "If email registered..." (security)
+
+---
+
+### Test Scenario 9: Cancel Join Request
+
+**Goal**: Verify user can cancel their own pending request.
+
+**Prerequisites**: User with pending join request
+
+**Steps**:
+
+1. Login as user with pending join request
+2. Hit API to cancel:
+   ```bash
+   curl -X DELETE http://localhost:8000/api/v1/join-requests/{request_id} \
+     -H "Authorization: Bearer <token>"
+   ```
+
+**Expected Results**:
+- Join request deleted
+- 204 No Content response
+- Request no longer appears in parent's list
+
+---
+
+### Test Scenario 10: Edge Cases
+
+#### 10a: Child tries to register without parent email
+**Steps**: Skip parent email field during child registration
+**Expected**: 400 error "Children must provide a parent's email"
+
+#### 10b: Register with existing email
+**Steps**: Try to register with email that already exists
+**Expected**: 400 error "Email already registered"
+
+#### 10c: Verify with invalid token
+**Steps**: Go to `/verify-email/invalid-token-123`
+**Expected**: Error page "Invalid or expired verification token"
+
+#### 10d: Approve unverified user
+**Steps**: Parent tries to approve child who hasn't verified email
+**Expected**: 400 error explaining child must verify first
+
+#### 10e: Review already-reviewed request
+**Steps**: Try to approve/reject a request that's already been handled
+**Expected**: 400 error "This request has already been approved/rejected"
+
+#### 10f: Cancel non-pending request
+**Steps**: Try to cancel an approved or rejected request
+**Expected**: 400 error "Cannot cancel a request that has been approved/rejected"
+
+---
+
+### API Quick Reference for Testing
+
+```bash
+# Base URL
+BASE=http://localhost:8000/api/v1
+
+# Register new user
+curl -X POST $BASE/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "TestPass123",
+    "first_name": "Test",
+    "last_name": "User",
+    "birth_year": 2000
+  }'
+
+# Verify email
+curl -X POST $BASE/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"token": "TOKEN_FROM_EMAIL"}'
+
+# Login
+curl -X POST $BASE/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "TestPass123"}'
+
+# Create join request (authenticated)
+curl -X POST $BASE/join-requests \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"parent_email": "parent@example.com", "message": "Please add me!"}'
+
+# List my join requests
+curl $BASE/me/join-requests \
+  -H "Authorization: Bearer <token>"
+
+# List family's pending join requests (parent only)
+curl $BASE/families/{family_id}/join-requests \
+  -H "Authorization: Bearer <token>"
+
+# Approve join request
+curl -X POST $BASE/join-requests/{request_id}/review \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "approve"}'
+
+# Reject join request
+curl -X POST $BASE/join-requests/{request_id}/review \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "reject"}'
+
+# Cancel join request
+curl -X DELETE $BASE/join-requests/{request_id} \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
 ## Coverage Reports
 
 ### Backend Coverage Goals

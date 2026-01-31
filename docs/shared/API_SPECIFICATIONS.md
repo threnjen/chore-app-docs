@@ -64,34 +64,32 @@ Response includes:
 ### Authentication Endpoints
 
 #### POST /auth/register
-Register new user (parent or child during onboarding)
+Register new user with age-based role determination.
+
+**Note**: As of Phase 2 Amendment, this endpoint requires `birth_year` and returns a `RegistrationResponse` instead of tokens. Email verification is required before login.
+
 ```json
 Request:
 {
-  "email": "parent@example.com",
-  "password": "securepassword123",
+  "email": "user@example.com",
+  "password": "SecurePass123",
   "first_name": "Jane",
   "last_name": "Doe",
-  "role": "PARENT",
-  "birthdate": "1985-05-15" // Optional for parents
+  "birth_year": 2008,  // Required - determines PARENT (18+) or CHILD (<18)
+  "parent_email": "parent@example.com",  // Required for children, optional for adults
+  "join_message": "Hi Mom, it's me!",  // Optional message for join request
+  "invitation_token": "abc123..."  // Optional, from invitation email link
 }
 
-Response:
+Response (201 Created):
 {
-  "success": true,
-  "data": {
-    "user": {
-      "id": "uuid",
-      "email": "parent@example.com",
-      "first_name": "Jane",
-      "last_name": "Doe",
-      "role": "PARENT"
-    },
-    "access_token": "jwt_token",
-    "refresh_token": "refresh_token",
-    "token_type": "bearer",
-    "expires_in": 3600
-  }
+  "user_id": "uuid",
+  "email": "user@example.com",
+  "role": "CHILD",
+  "email_verified": false,
+  "join_request_created": true,
+  "family_created": false,
+  "message": "Account created! We've sent a request to your parent. Please verify your email while waiting for approval."
 }
 ```
 
@@ -158,6 +156,42 @@ Response:
   "access_token": "new_jwt_token",
   "refresh_token": "new_refresh_token",
   "expires_in": 3600
+}
+```
+
+#### POST /auth/verify-email
+Verify user email with token from verification email.
+```json
+Request:
+{
+  "token": "verification_token_from_email"
+}
+
+Response (200 OK):
+{
+  "access_token": "jwt_token",
+  "refresh_token": "refresh_token",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
+
+Error (400 Bad Request):
+{
+  "detail": "Invalid or expired verification token"
+}
+```
+
+#### POST /auth/resend-verification
+Resend email verification link.
+```json
+Request:
+{
+  "email": "user@example.com"
+}
+
+Response (200 OK):
+{
+  "message": "If this email is registered, a verification link will be sent."
 }
 ```
 
@@ -263,6 +297,96 @@ Response:
     }
   }
 }
+```
+
+### Join Request Endpoints
+
+Join requests allow users to request membership in a family. Added in Phase 2 Amendment.
+
+#### POST /join-requests
+Create a request to join a family by providing a parent's email.
+```json
+Request:
+{
+  "parent_email": "parent@example.com",
+  "message": "Hi, please add me to the family!"  // Optional
+}
+
+Response (201 Created):
+{
+  "request_id": "uuid",
+  "target_email": "parent@example.com",
+  "status": "PENDING",
+  "message": "Your request to join has been sent to Jane. You'll be notified when they respond."
+}
+```
+
+#### GET /me/join-requests
+Get the current user's join requests (sent by them).
+```json
+Response:
+{
+  "pending_requests": [
+    {
+      "id": "uuid",
+      "requester_email": "child@example.com",
+      "requester_first_name": "Tommy",
+      "requester_last_name": "Smith",
+      "family_id": "uuid",
+      "family_name": "Smith Family",
+      "target_email": "parent@example.com",
+      "status": "PENDING",
+      "message": "Hi Mom!",
+      "created_at": "2026-01-29T12:00:00Z",
+      "expires_at": "2026-02-28T12:00:00Z",
+      "reviewed_by_id": null,
+      "reviewed_at": null
+    }
+  ],
+  "total_count": 1
+}
+```
+
+#### GET /families/{family_id}/join-requests
+Get pending join requests for a family (parents only).
+```json
+Response:
+{
+  "pending_requests": [...],  // Same format as above
+  "total_count": 3
+}
+```
+
+#### POST /join-requests/{request_id}/review
+Approve or reject a join request (parents only).
+```json
+Request:
+{
+  "action": "approve"  // or "reject"
+}
+
+Response (200 OK - Approve):
+{
+  "message": "Tommy has been added to Smith Family!",
+  "status": "approved"
+}
+
+Response (200 OK - Reject):
+{
+  "message": "Request from Tommy has been rejected.",
+  "status": "rejected"
+}
+
+Error (400 - Email not verified):
+{
+  "detail": "Tommy hasn't verified their email yet. They need to verify before they can join."
+}
+```
+
+#### DELETE /join-requests/{request_id}
+Cancel a pending join request (requester only).
+```json
+Response (204 No Content)
 ```
 
 ### Account Endpoints
