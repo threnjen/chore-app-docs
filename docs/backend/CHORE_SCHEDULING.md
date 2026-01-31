@@ -179,6 +179,36 @@ Overdue:
 
 ---
 
+## Scheduler Implementation
+
+### Current Implementation (Development)
+
+The scheduling system uses APScheduler with `MemoryJobStore`, which means:
+- Jobs are stored in memory only
+- **Jobs do not persist across application restarts**
+- Ideal for development and testing environments
+
+### Production Considerations
+
+For production deployments, upgrade to persistent job storage:
+
+```python
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+
+jobstores = {
+    'default': SQLAlchemyJobStore(url=DATABASE_URL)
+}
+
+scheduler = BackgroundScheduler(jobstores=jobstores)
+```
+
+This ensures:
+- Jobs survive application restarts
+- Scheduled chore generation continues reliably
+- Multiple worker instances can share the same job store
+
+---
+
 ## Database Indexes
 
 For optimal query performance:
