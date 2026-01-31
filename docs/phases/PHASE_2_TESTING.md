@@ -25,6 +25,8 @@
 | Assignment workflow | 100% | Critical |
 | Approval/rejection flow | 100% | Critical |
 | Reward crediting | 100% | Critical |
+| Penalty system | 100% | Critical |
+| Expiration workflow | 100% | Critical |
 | Chore CRUD operations | 80% | High |
 | Background jobs | 80% | High |
 | Multi-tenant isolation | 100% | Critical |
@@ -217,6 +219,48 @@
 | RWD-05 | Decimal precision maintained | Reward = $5.75 | Balance +$5.75 exactly |
 | RWD-06 | Atomicity on failure | DB error during credit | Both assignment and transaction rolled back |
 | RWD-07 | No account exists | Child has no account | 400, no default account |
+| RWD-08 | Credit on complete (instant) | credit_on_complete = True | Balance credited on completion, not approval |
+| RWD-09 | Credit on approval (default) | credit_on_complete = False | Balance credited only after approval |
+| RWD-10 | No duplicate credit | Approve with credit_on_complete=True | Reward only credited once |
+
+---
+
+### Penalty System (100% Coverage Required)
+
+| ID | Scenario | Input | Expected Result |
+|----|----------|-------|-----------------|
+| PEN-01 | Penalty on rejection | penalty_behavior = ON_REJECTION, reject | Balance decreases by penalty_amount |
+| PEN-02 | No penalty on rejection | penalty_behavior = ON_EXPIRATION, reject | No balance change |
+| PEN-03 | Penalty on expiration | penalty_behavior = ON_EXPIRATION, expire | Balance decreases |
+| PEN-04 | No penalty on expiration | penalty_behavior = ON_REJECTION, expire | No balance change |
+| PEN-05 | Penalty on both | penalty_behavior = ON_BOTH, reject | Balance decreases |
+| PEN-06 | Penalty on both (expiration) | penalty_behavior = ON_BOTH, expire | Balance decreases |
+| PEN-07 | No penalty configured | penalty_behavior = NONE, reject | No balance change |
+| PEN-08 | Penalty transaction category | Any penalty | category = CHORE_PENALTY |
+| PEN-09 | Penalty description includes title | Chore titled "Clean room" | "Penalty for: Clean room" |
+| PEN-10 | Penalty reference links assignment | Any penalty | reference_id = assignment.id |
+| PEN-11 | Decimal precision maintained | Penalty = $2.50 | Balance -$2.50 exactly |
+| PEN-12 | Penalty atomicity on failure | DB error during penalty | Both assignment and transaction rolled back |
+| PEN-13 | No account exists | Child has no account | 400, no default account |
+| PEN-14 | penalty_applied flag set | Penalty applied | assignment.penalty_applied = True |
+| PEN-15 | Skip penalty if already applied | penalty_applied = True | No duplicate penalty |
+| PEN-16 | Override penalty on reject | apply_penalty = False in request | No penalty despite config |
+| PEN-17 | Balance can go negative | Penalty > balance | Balance becomes negative |
+
+---
+
+### Expiration Workflow
+
+| ID | Scenario | Input | Expected Result |
+|----|----------|-------|-----------------|
+| EXP-01 | Auto-expire after expiration_days | expiration_days = 3, overdue 4 days | status = EXPIRED |
+| EXP-02 | No auto-expire without config | expiration_days = None, overdue 30 days | status = PENDING |
+| EXP-03 | Expire job runs | Scheduled trigger | Eligible assignments expired |
+| EXP-04 | expired_at timestamp set | Assignment expires | expired_at = now() |
+| EXP-05 | Late completion allowed | allow_late_completion = True | Can complete overdue |
+| EXP-06 | Late completion blocked | allow_late_completion = False, overdue | 400, cannot complete |
+| EXP-07 | Cannot complete expired | status = EXPIRED | 400, assignment expired |
+| EXP-08 | Penalty applied on expiration | penalty_behavior = ON_EXPIRATION | Balance debited |
 
 ---
 
@@ -257,6 +301,8 @@
 | JOB-04 | Auto-approve respects threshold | auto_approve_after = 24 | Only 24+ hour old completions |
 | JOB-05 | Job handles errors gracefully | Exception in job | Scheduler continues |
 | JOB-06 | Jobs persist across restart | Restart app | Jobs still scheduled |
+| JOB-07 | Expire assignments job runs | Hourly trigger | Overdue assignments expired |
+| JOB-08 | Expire job applies penalties | penalty_behavior configured | Penalties applied on expiration |
 
 ---
 

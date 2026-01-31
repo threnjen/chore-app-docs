@@ -20,7 +20,7 @@ Phase 2 implements the core chore management system with advanced scheduling cap
 | Chore Assignments | Instance generation from recurrence rules | Critical |
 | Completion Workflow | Kids mark chores complete | Critical |
 | Approval Workflow | Parents approve/reject completions | Critical |
-| Reward Crediting | Automatic balance updates on approval | Critical |
+| Reward/Penalty System | Configurable credits on approval, debits on rejection/expiration | Critical |
 | Background Jobs | Scheduled instance generation | High |
 | Overdue Tracking | Single instance with cumulative overdue days | High |
 
@@ -131,9 +131,11 @@ e2e/
 | family_id | UUID | FK → families.id, not null |
 | title | String(255) | Not null |
 | description | Text | Nullable |
-| reward_amount | Decimal(10,2) | Nullable |
+| reward_amount | Decimal(10,2) | Nullable (credit on approval) |
 | reward_type | Enum | 'money', 'points', 'stars' |
-| penalty_amount | Decimal(10,2) | Nullable |
+| penalty_amount | Decimal(10,2) | Nullable (debit on rejection/expiration) |
+| penalty_behavior | Enum | 'none', 'on_rejection', 'on_expiration', 'on_both' |
+| credit_on_complete | Boolean | default false (credit immediately on completion vs. on approval) |
 | assignment_type | Enum | 'ASSIGNED', 'FIRST_DIBS' |
 | recurrence_rule | JSONB | RFC 5545 + extensions |
 | timing_mode | Enum | 'absolute', 'relative' |
@@ -142,10 +144,22 @@ e2e/
 | require_photo | Boolean | default false |
 | require_approval | Boolean | default true |
 | auto_approve_after | Integer | Hours, nullable |
+| allow_late_completion | Boolean | default true (can complete after due date) |
+| expiration_days | Integer | Nullable (days after due date before expiration) |
 | is_active | Boolean | default true |
 | created_by_id | UUID | FK → users.id |
 | created_at | DateTime | default now |
 | updated_at | DateTime | onupdate now |
+
+#### Penalty Behavior Enum
+
+```python
+class PenaltyBehavior(str, enum.Enum):
+    NONE = "NONE"                 # No penalty ever applied
+    ON_REJECTION = "ON_REJECTION" # Debit when parent rejects completion
+    ON_EXPIRATION = "ON_EXPIRATION" # Debit when chore expires without completion
+    ON_BOTH = "ON_BOTH"           # Debit on either rejection or expiration
+```
 
 #### ChoreAssignment Model
 
@@ -166,9 +180,14 @@ e2e/
 | approved_by_id | UUID | FK → users.id, nullable |
 | rejected_at | DateTime | Nullable |
 | rejection_reason | Text | Nullable |
+| expired_at | DateTime | Nullable |
 | total_overdue_days | Integer | default 0 |
 | photo_urls | ARRAY(Text) | Nullable |
 | reward_amount | Decimal(10,2) | Snapshot from chore |
+| penalty_amount | Decimal(10,2) | Snapshot from chore |
+| penalty_behavior | String | Snapshot from chore |
+| reward_credited | Boolean | default false |
+| penalty_applied | Boolean | default false |
 | created_at | DateTime | default now |
 | updated_at | DateTime | onupdate now |
 
@@ -409,6 +428,16 @@ def register_chore_jobs(scheduler: AsyncIOScheduler):
         id='auto_approve_chores',
         replace_existing=True
     )
+    
+    # Expire overdue chores and apply penalties
+    scheduler.add_job(
+        func=expire_chores_job,
+        trigger='cron',
+        hour=0,
+        minute=15,
+        id='expire_chores',
+        replace_existing=True
+    )
 
 async def generate_chore_instances_job():
     """
@@ -436,6 +465,15 @@ async def auto_approve_chores_job():
     async with get_db_session() as db:
         service = ChoreService(db)
         await service.process_auto_approvals()
+
+async def expire_chores_job():
+    """
+    Expire overdue chores past their expiration_days threshold.
+    Applies penalties according to penalty_behavior configuration.
+    """
+    async with get_db_session() as db:
+        service = ChoreService(db)
+        await service.process_expirations()
 ```
 
 **Acceptance Criteria:**
@@ -511,23 +549,30 @@ class ChoreService:
         assignment_id: UUID,
         user_id: UUID,
         photo_urls: list[str] | None = None
-    ) -> ChoreAssignment:
-        """Mark assignment as completed."""
+    ) -> tuple[ChoreAssignment, Transaction | None]:
+        """Mark assignment as completed. May credit reward if credit_on_complete=True."""
         
     async def approve_assignment(
         self,
         assignment_id: UUID,
         approver_id: UUID
-    ) -> tuple[ChoreAssignment, Transaction]:
-        """Approve assignment and credit reward."""
+    ) -> tuple[ChoreAssignment, Transaction | None]:
+        """Approve assignment and credit reward (if not already credited on complete)."""
         
     async def reject_assignment(
         self,
         assignment_id: UUID,
         rejector_id: UUID,
-        reason: str
-    ) -> ChoreAssignment:
-        """Reject assignment with reason."""
+        reason: str,
+        apply_penalty: bool = True
+    ) -> tuple[ChoreAssignment, Transaction | None]:
+        """Reject assignment with reason. Optionally apply penalty debit."""
+    
+    async def expire_assignment(
+        self,
+        assignment_id: UUID
+    ) -> tuple[ChoreAssignment, Transaction | None]:
+        """Mark assignment as expired. Apply penalty if configured."""
     
     # Background Job Support
     async def generate_upcoming_instances(
@@ -541,6 +586,9 @@ class ChoreService:
         
     async def process_auto_approvals(self) -> int:
         """Auto-approve eligible completed assignments."""
+    
+    async def process_expirations(self) -> int:
+        """Expire overdue assignments past their expiration_days threshold."""
 ```
 
 #### Approval Workflow with Reward Crediting
@@ -550,54 +598,163 @@ async def approve_assignment(
     self,
     assignment_id: UUID,
     approver_id: UUID
-) -> tuple[ChoreAssignment, Transaction]:
+) -> tuple[ChoreAssignment, Transaction | None]:
     """
     Approve a completed chore assignment and credit the reward.
     
     1. Validate assignment is in COMPLETED status
     2. Validate approver is a parent in the family
     3. Update assignment status to APPROVED
-    4. Create transaction crediting reward to child's account
+    4. Create transaction crediting reward to child's account (if not already credited)
     5. Return both assignment and transaction
     """
-    # Get assignment with chore details
     assignment = await self._get_assignment(assignment_id)
     
     if assignment.status != AssignmentStatus.COMPLETED:
         raise HTTPException(400, "Assignment not in completed status")
     
-    # Validate approver is parent in family
     await self._validate_parent_permission(approver_id, assignment.family_id)
     
-    # Update assignment
     assignment.status = AssignmentStatus.APPROVED
     assignment.approved_at = datetime.now(timezone.utc)
     assignment.approved_by_id = approver_id
     
-    # Credit reward if monetary
+    # Credit reward if not already credited on completion
     transaction = None
-    if assignment.reward_amount and assignment.reward_amount > 0:
-        # Find child's default spending account
-        account = await self._get_default_account(
-            assignment.assigned_to_id or assignment.completed_by_id,
-            assignment.family_id
-        )
-        
-        # Create reward transaction
-        transaction_service = TransactionService(self.db)
-        transaction = await transaction_service.create_transaction(
-            account_id=account.id,
-            amount=assignment.reward_amount,
-            transaction_type=TransactionType.CREDIT,
-            category=TransactionCategory.CHORE_REWARD,
-            description=f"Reward for: {assignment.chore.title}",
-            created_by_id=approver_id,
-            reference_id=assignment.id,
-            reference_type="chore_assignment"
-        )
+    if (assignment.reward_amount and assignment.reward_amount > 0 
+            and not assignment.reward_credited):
+        transaction = await self._credit_reward(assignment, approver_id)
+        assignment.reward_credited = True
     
     await self.db.commit()
     return assignment, transaction
+```
+
+#### Rejection Workflow with Penalty Debit
+
+```python
+async def reject_assignment(
+    self,
+    assignment_id: UUID,
+    rejector_id: UUID,
+    reason: str,
+    apply_penalty: bool = True
+) -> tuple[ChoreAssignment, Transaction | None]:
+    """
+    Reject a completed chore assignment and optionally apply penalty.
+    
+    1. Validate assignment is in COMPLETED status
+    2. Validate rejector is a parent in the family
+    3. Update assignment status to REJECTED
+    4. If penalty configured and apply_penalty=True, debit child's account
+    5. Allow re-completion (status can go back to COMPLETED)
+    """
+    assignment = await self._get_assignment(assignment_id)
+    
+    if assignment.status != AssignmentStatus.COMPLETED:
+        raise HTTPException(400, "Assignment not in completed status")
+    
+    await self._validate_parent_permission(rejector_id, assignment.family_id)
+    
+    assignment.status = AssignmentStatus.REJECTED
+    assignment.rejected_at = datetime.now(timezone.utc)
+    assignment.rejection_reason = reason
+    
+    # Apply penalty if configured
+    transaction = None
+    penalty_behavior = assignment.penalty_behavior or "NONE"
+    
+    if (apply_penalty 
+            and assignment.penalty_amount 
+            and assignment.penalty_amount > 0
+            and penalty_behavior in ["ON_REJECTION", "ON_BOTH"]
+            and not assignment.penalty_applied):
+        transaction = await self._apply_penalty(assignment, rejector_id)
+        assignment.penalty_applied = True
+    
+    await self.db.commit()
+    return assignment, transaction
+```
+
+#### Expiration Workflow with Penalty
+
+```python
+async def expire_assignment(
+    self,
+    assignment_id: UUID
+) -> tuple[ChoreAssignment, Transaction | None]:
+    """
+    Mark an overdue assignment as expired and optionally apply penalty.
+    
+    Called by background job when assignment exceeds expiration_days.
+    """
+    assignment = await self._get_assignment(assignment_id)
+    
+    if assignment.status not in [AssignmentStatus.PENDING, AssignmentStatus.CLAIMED]:
+        return assignment, None  # Already processed
+    
+    assignment.status = AssignmentStatus.EXPIRED
+    assignment.expired_at = datetime.now(timezone.utc)
+    
+    # Apply penalty if configured
+    transaction = None
+    penalty_behavior = assignment.penalty_behavior or "NONE"
+    
+    if (assignment.penalty_amount 
+            and assignment.penalty_amount > 0
+            and penalty_behavior in ["ON_EXPIRATION", "ON_BOTH"]
+            and not assignment.penalty_applied):
+        transaction = await self._apply_penalty(assignment, created_by_id=None)
+        assignment.penalty_applied = True
+    
+    await self.db.commit()
+    return assignment, transaction
+
+async def _apply_penalty(
+    self, 
+    assignment: ChoreAssignment, 
+    created_by_id: UUID | None
+) -> Transaction:
+    """Debit penalty amount from child's account."""
+    account = await self._get_default_account(
+        assignment.assigned_to_id or assignment.completed_by_id,
+        assignment.family_id
+    )
+    
+    transaction_service = TransactionService(self.db)
+    return await transaction_service.create_transaction(
+        account_id=account.id,
+        amount=assignment.penalty_amount,
+        transaction_type=TransactionType.DEBIT,
+        category=TransactionCategory.CHORE_PENALTY,
+        description=f"Penalty for: {assignment.chore.title}",
+        created_by_id=created_by_id,
+        reference_id=assignment.id,
+        reference_type="chore_assignment"
+    )
+
+async def _credit_reward(
+    self, 
+    assignment: ChoreAssignment, 
+    created_by_id: UUID
+) -> Transaction:
+    """Credit reward amount to child's account."""
+    account = await self._get_default_account(
+        assignment.assigned_to_id or assignment.completed_by_id,
+        assignment.family_id
+    )
+    
+    transaction_service = TransactionService(self.db)
+    return await transaction_service.create_transaction(
+        account_id=account.id,
+        amount=assignment.reward_amount,
+        transaction_type=TransactionType.CREDIT,
+        category=TransactionCategory.CHORE_REWARD,
+        description=f"Reward for: {assignment.chore.title}",
+        created_by_id=created_by_id,
+        reference_id=assignment.id,
+        reference_type="chore_assignment"
+    )
 ```
 
 **Acceptance Criteria:**
@@ -605,7 +762,12 @@ async def approve_assignment(
 - [ ] CRUD operations respect family isolation
 - [ ] Assignments generated correctly from recurrence rules
 - [ ] Completion workflow updates status appropriately
-- [ ] Approval workflow credits reward atomically
+- [ ] Completion can optionally credit reward immediately (credit_on_complete)
+- [ ] Approval workflow credits reward atomically (if not already credited)
+- [ ] Rejection workflow optionally applies penalty debit
+- [ ] Expiration workflow applies penalty if configured
+- [ ] Penalties respect penalty_behavior configuration
+- [ ] Rewards and penalties are only applied once (tracked via flags)
 - [ ] Rejection allows re-completion
 - [ ] Overdue tracking calculated correctly
 
@@ -637,14 +799,19 @@ class ChoreBase(BaseModel):
     """Base chore fields."""
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
-    reward_amount: Decimal | None = Field(default=None, ge=0)
+    reward_amount: Decimal | None = Field(default=None, ge=0, description="Credit on approval")
     reward_type: Literal["money", "points", "stars"] = "money"
+    penalty_amount: Decimal | None = Field(default=None, ge=0, description="Debit on rejection/expiration")
+    penalty_behavior: Literal["NONE", "ON_REJECTION", "ON_EXPIRATION", "ON_BOTH"] = "NONE"
+    credit_on_complete: bool = Field(default=False, description="Credit immediately on completion vs. on approval")
     assignment_type: Literal["ASSIGNED", "FIRST_DIBS"] = "ASSIGNED"
     deadline_time: time | None = None
     estimated_duration: int | None = Field(default=None, ge=1, description="Duration in minutes")
     require_photo: bool = False
     require_approval: bool = True
     auto_approve_after: int | None = Field(default=None, ge=1, description="Hours until auto-approve")
+    allow_late_completion: bool = Field(default=True, description="Can complete after due date")
+    expiration_days: int | None = Field(default=None, ge=1, description="Days after due date before expiration")
 
 class ChoreCreate(ChoreBase):
     """Create chore request."""
@@ -690,9 +857,14 @@ class ChoreAssignmentRead(BaseModel):
     status: str
     total_overdue_days: int
     reward_amount: Decimal | None
+    penalty_amount: Decimal | None
+    penalty_behavior: str
+    reward_credited: bool
+    penalty_applied: bool
     completed_at: datetime | None
     approved_at: datetime | None
     rejected_at: datetime | None
+    expired_at: datetime | None
     rejection_reason: str | None
     
     model_config = ConfigDict(from_attributes=True)
@@ -704,6 +876,7 @@ class AssignmentComplete(BaseModel):
 class AssignmentReject(BaseModel):
     """Reject assignment request."""
     reason: str = Field(..., min_length=1, max_length=500)
+    apply_penalty: bool = Field(default=True, description="Apply configured penalty on rejection")
 ```
 
 **Acceptance Criteria:**
