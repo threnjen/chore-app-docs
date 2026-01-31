@@ -1537,6 +1537,24 @@ PARENTING_PRESETS = {
 
 ---
 
+### Deferred Features & Future Enhancements
+
+Features explicitly considered but deferred from earlier phases for future implementation:
+
+| Feature | Originally Considered | Target Phase | Rationale |
+|---------|----------------------|--------------|-----------|
+| Streak bonuses | Phase 2 | Post-MVP | Track consecutive on-time completions with bonus rewards |
+| Partial completion rewards | Phase 2 | Post-MVP | Percentage completion = percentage reward |
+| Time-based reward modifiers | Phase 2 | Post-MVP | Different rewards for morning vs evening completion |
+| Chore difficulty levels | Phase 2 | Phase 3 | Easy/Medium/Hard with corresponding rewards |
+| Family leaderboards | Phase 3 | Phase 4+ | Gamification: compare siblings on completion rates |
+| Achievement badges | Phase 3 | Phase 4+ | Unlock badges for milestones (100 chores, etc.) |
+| Recurring penalties | Phase 2 | Post-MVP | Auto-deduct penalty each day chore remains incomplete |
+
+> **Note:** This list will be updated as features are deferred during development. Features marked "Post-MVP" are candidates for consideration after initial launch.
+
+---
+
 ### Test Data
 
 Four test families are seeded:

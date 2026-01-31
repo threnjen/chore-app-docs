@@ -123,6 +123,31 @@ e2e/
 - [ ] `app/models/chore.py`
 - [ ] `alembic/versions/004_add_chores.py`
 
+**Files to update:**
+
+- [ ] `app/models/transaction.py` — Add `CHORE_PENALTY` to `TransactionCategory` enum
+
+#### TransactionCategory Enum Update
+
+```python
+class TransactionCategory(str, enum.Enum):
+    """Category of transaction for reporting."""
+    
+    CHORE_REWARD = "CHORE_REWARD"   # Earned from completing chore
+    CHORE_PENALTY = "CHORE_PENALTY" # NEW: Deducted for rejection/expiration/late completion
+    ALLOWANCE = "ALLOWANCE"         # Regular allowance payment
+    INTEREST = "INTEREST"           # Interest earned on savings
+    TRANSFER_IN = "TRANSFER_IN"     # Received from another account
+    TRANSFER_OUT = "TRANSFER_OUT"   # Sent to another account
+    MANUAL_CREDIT = "MANUAL_CREDIT" # Manual deposit by parent
+    MANUAL_DEBIT = "MANUAL_DEBIT"   # Manual withdrawal by parent
+    PURCHASE = "PURCHASE"           # Money spent
+    DONATION = "DONATION"           # Money donated (Give account)
+    OTHER = "OTHER"                 # Miscellaneous
+```
+
+> **Migration Note**: The `004_add_chores.py` migration must also add the `CHORE_PENALTY` value to the existing `transactioncategory` PostgreSQL enum type.
+
 #### Chore Model
 
 | Column | Type | Constraints |
@@ -146,6 +171,14 @@ e2e/
 | auto_approve_after | Integer | Hours, nullable |
 | allow_late_completion | Boolean | default true (can complete after due date) |
 | expiration_days | Integer | Nullable (days after due date before expiration) |
+| grace_period_days | Integer | Nullable (days after due date before "late") |
+| grace_period_hours | Integer | Nullable (additional hours after grace days) |
+| late_reward_percentage | Integer | Nullable (percentage of reward_amount for late completion, e.g., 50 = 50%) |
+| late_penalty_amount | Decimal(10,2) | Nullable (penalty for late-but-valid completion) |
+| early_bonus_amount | Decimal(10,2) | Nullable (extra reward for early completion) |
+| early_threshold_hours | Integer | Nullable (hours before deadline to qualify for bonus) |
+| penalty_per_overdue_day | Decimal(10,2) | Nullable (additional penalty per day overdue) |
+| max_penalty_amount | Decimal(10,2) | Nullable (cap on total penalty) |
 | is_active | Boolean | default true |
 | created_by_id | UUID | FK → users.id |
 | created_at | DateTime | default now |
@@ -159,6 +192,12 @@ class PenaltyBehavior(str, enum.Enum):
     ON_REJECTION = "ON_REJECTION" # Debit when parent rejects completion
     ON_EXPIRATION = "ON_EXPIRATION" # Debit when chore expires without completion
     ON_BOTH = "ON_BOTH"           # Debit on either rejection or expiration
+
+class RewardTier(str, enum.Enum):
+    FULL = "FULL"       # Full reward_amount (on-time or early completion)
+    REDUCED = "REDUCED" # late_reward_percentage of reward_amount (late completion)
+    BONUS = "BONUS"     # reward_amount + early_bonus_amount (early completion)
+    NONE = "NONE"       # No reward (neutral chore or failed completion)
 ```
 
 #### ChoreAssignment Model
@@ -186,6 +225,18 @@ class PenaltyBehavior(str, enum.Enum):
 | reward_amount | Decimal(10,2) | Snapshot from chore |
 | penalty_amount | Decimal(10,2) | Snapshot from chore |
 | penalty_behavior | String | Snapshot from chore |
+| grace_period_days | Integer | Snapshot from chore |
+| grace_period_hours | Integer | Snapshot from chore |
+| late_reward_percentage | Integer | Snapshot from chore |
+| late_penalty_amount | Decimal(10,2) | Snapshot from chore |
+| early_bonus_amount | Decimal(10,2) | Snapshot from chore |
+| early_threshold_hours | Integer | Snapshot from chore |
+| penalty_per_overdue_day | Decimal(10,2) | Snapshot from chore |
+| max_penalty_amount | Decimal(10,2) | Snapshot from chore |
+| completed_on_time | Boolean | Nullable (calculated on completion) |
+| reward_tier | Enum | 'FULL', 'REDUCED', 'BONUS', 'NONE' (determined on completion) |
+| effective_reward | Decimal(10,2) | Actual amount credited |
+| effective_penalty | Decimal(10,2) | Actual amount debited |
 | reward_credited | Boolean | default false |
 | penalty_applied | Boolean | default false |
 | created_at | DateTime | default now |
@@ -550,14 +601,20 @@ class ChoreService:
         user_id: UUID,
         photo_urls: list[str] | None = None
     ) -> tuple[ChoreAssignment, Transaction | None]:
-        """Mark assignment as completed. May credit reward if credit_on_complete=True."""
+        """
+        Mark assignment as completed.
+        - Calculates completed_on_time based on grace period
+        - Determines reward_tier and effective_reward
+        - May credit reward if credit_on_complete=True
+        - May apply late_penalty_amount if completed late
+        """
         
     async def approve_assignment(
         self,
         assignment_id: UUID,
         approver_id: UUID
     ) -> tuple[ChoreAssignment, Transaction | None]:
-        """Approve assignment and credit reward (if not already credited on complete)."""
+        """Approve assignment and credit effective_reward (if not already credited on complete)."""
         
     async def reject_assignment(
         self,
@@ -572,7 +629,45 @@ class ChoreService:
         self,
         assignment_id: UUID
     ) -> tuple[ChoreAssignment, Transaction | None]:
-        """Mark assignment as expired. Apply penalty if configured."""
+        """Mark assignment as expired. Apply escalating penalty if configured."""
+    
+    # Reward/Penalty Calculation Helpers
+    def _calculate_completion_timing(
+        self,
+        assignment: ChoreAssignment,
+        completed_at: datetime
+    ) -> tuple[bool, RewardTier]:
+        """
+        Determine if completion is on-time and which reward tier applies.
+        
+        Returns (completed_on_time, reward_tier)
+        """
+        
+    def _calculate_effective_reward(
+        self,
+        assignment: ChoreAssignment,
+        reward_tier: RewardTier
+    ) -> Decimal:
+        """
+        Calculate the actual reward amount based on tier.
+        
+        - BONUS: reward_amount + early_bonus_amount
+        - FULL: reward_amount
+        - REDUCED: reward_amount * (late_reward_percentage / 100)
+        - NONE: 0
+        """
+        
+    def _calculate_effective_penalty(
+        self,
+        assignment: ChoreAssignment,
+        is_escalating: bool = False
+    ) -> Decimal:
+        """
+        Calculate the actual penalty amount.
+        
+        For escalating penalties:
+        penalty = min(penalty_amount + (penalty_per_overdue_day * total_overdue_days), max_penalty_amount)
+        """
     
     # Background Job Support
     async def generate_upcoming_instances(
@@ -591,7 +686,136 @@ class ChoreService:
         """Expire overdue assignments past their expiration_days threshold."""
 ```
 
-#### Approval Workflow with Reward Crediting
+#### Completion Workflow with Tier Calculation
+
+```python
+async def complete_assignment(
+    self,
+    assignment_id: UUID,
+    user_id: UUID,
+    photo_urls: list[str] | None = None
+) -> tuple[ChoreAssignment, Transaction | None]:
+    """
+    Mark assignment as completed with reward tier calculation.
+    
+    1. Validate assignment is in PENDING/CLAIMED status
+    2. Check if late completion is allowed (if applicable)
+    3. Calculate completed_on_time and reward_tier
+    4. Calculate effective_reward based on tier
+    5. Apply late_penalty_amount if completing late (mutually exclusive with expiration penalty)
+    6. Credit reward if credit_on_complete=True
+    """
+    assignment = await self._get_assignment(assignment_id)
+    now = datetime.now(timezone.utc)
+    
+    # Validate status
+    if assignment.status not in [AssignmentStatus.PENDING, AssignmentStatus.CLAIMED]:
+        raise HTTPException(400, "Assignment not available for completion")
+    
+    # Check late completion permission
+    due_datetime = datetime.combine(assignment.due_date, assignment.due_time or time.max)
+    if now > due_datetime and not assignment.allow_late_completion:
+        raise HTTPException(400, "Late completion not allowed for this chore")
+    
+    # Calculate timing and tier
+    completed_on_time, reward_tier = self._calculate_completion_timing(assignment, now)
+    effective_reward = self._calculate_effective_reward(assignment, reward_tier)
+    
+    # Update assignment
+    assignment.status = AssignmentStatus.COMPLETED
+    assignment.completed_at = now
+    assignment.completed_by_id = user_id
+    assignment.photo_urls = photo_urls
+    assignment.completed_on_time = completed_on_time
+    assignment.reward_tier = reward_tier
+    assignment.effective_reward = effective_reward
+    
+    transaction = None
+    
+    # Apply late penalty if completing late (mutually exclusive with expiration)
+    if (not completed_on_time 
+            and assignment.late_penalty_amount 
+            and assignment.late_penalty_amount > 0
+            and not assignment.penalty_applied):
+        assignment.effective_penalty = assignment.late_penalty_amount
+        transaction = await self._apply_penalty(
+            assignment, 
+            created_by_id=None, 
+            amount=assignment.late_penalty_amount,
+            description_prefix="Late completion penalty"
+        )
+        assignment.penalty_applied = True
+    
+    # Credit reward immediately if configured
+    if assignment.credit_on_complete and effective_reward > 0:
+        transaction = await self._credit_reward(assignment, user_id, amount=effective_reward)
+        assignment.reward_credited = True
+    
+    await self.db.commit()
+    return assignment, transaction
+
+def _calculate_completion_timing(
+    self,
+    assignment: ChoreAssignment,
+    completed_at: datetime
+) -> tuple[bool, RewardTier]:
+    """Determine if completion is on-time and which reward tier applies."""
+    due_datetime = datetime.combine(
+        assignment.due_date, 
+        assignment.due_time or time.max,
+        tzinfo=timezone.utc
+    )
+    
+    # Check for early completion bonus
+    if assignment.early_threshold_hours and assignment.early_bonus_amount:
+        early_threshold = due_datetime - timedelta(hours=assignment.early_threshold_hours)
+        if completed_at <= early_threshold:
+            return True, RewardTier.BONUS
+    
+    # Check for on-time completion (before grace period)
+    grace_delta = timedelta(
+        days=assignment.grace_period_days or 0,
+        hours=assignment.grace_period_hours or 0
+    )
+    grace_deadline = due_datetime + grace_delta
+    
+    # If no grace period configured, any completion before expiration is "on-time"
+    if assignment.grace_period_days is None and assignment.grace_period_hours is None:
+        return True, RewardTier.FULL
+    
+    if completed_at <= due_datetime:
+        return True, RewardTier.FULL
+    elif completed_at <= grace_deadline:
+        # Late but within grace period
+        if assignment.late_reward_percentage is not None:
+            return False, RewardTier.REDUCED
+        return False, RewardTier.FULL  # No reduced tier configured
+    else:
+        # Past grace period
+        if assignment.late_reward_percentage is not None:
+            return False, RewardTier.REDUCED
+        return False, RewardTier.NONE
+
+def _calculate_effective_reward(
+    self,
+    assignment: ChoreAssignment,
+    reward_tier: RewardTier
+) -> Decimal:
+    """Calculate actual reward based on tier."""
+    base_reward = assignment.reward_amount or Decimal("0")
+    
+    if reward_tier == RewardTier.BONUS:
+        return base_reward + (assignment.early_bonus_amount or Decimal("0"))
+    elif reward_tier == RewardTier.FULL:
+        return base_reward
+    elif reward_tier == RewardTier.REDUCED:
+        percentage = assignment.late_reward_percentage or 100
+        return base_reward * Decimal(percentage) / Decimal(100)
+    else:  # NONE
+        return Decimal("0")
+```
+
+#### Approval Workflow with Tiered Reward Crediting
 
 ```python
 async def approve_assignment(
@@ -600,12 +824,12 @@ async def approve_assignment(
     approver_id: UUID
 ) -> tuple[ChoreAssignment, Transaction | None]:
     """
-    Approve a completed chore assignment and credit the reward.
+    Approve a completed chore assignment and credit the effective_reward.
     
     1. Validate assignment is in COMPLETED status
     2. Validate approver is a parent in the family
     3. Update assignment status to APPROVED
-    4. Create transaction crediting reward to child's account (if not already credited)
+    4. Create transaction crediting effective_reward to child's account (if not already credited)
     5. Return both assignment and transaction
     """
     assignment = await self._get_assignment(assignment_id)
@@ -619,11 +843,15 @@ async def approve_assignment(
     assignment.approved_at = datetime.now(timezone.utc)
     assignment.approved_by_id = approver_id
     
-    # Credit reward if not already credited on completion
+    # Credit effective_reward if not already credited on completion
     transaction = None
-    if (assignment.reward_amount and assignment.reward_amount > 0 
+    if (assignment.effective_reward and assignment.effective_reward > 0 
             and not assignment.reward_credited):
-        transaction = await self._credit_reward(assignment, approver_id)
+        transaction = await self._credit_reward(
+            assignment, 
+            approver_id, 
+            amount=assignment.effective_reward
+        )
         assignment.reward_credited = True
     
     await self.db.commit()
@@ -647,6 +875,7 @@ async def reject_assignment(
     2. Validate rejector is a parent in the family
     3. Update assignment status to REJECTED
     4. If penalty configured and apply_penalty=True, debit child's account
+    5. Late penalty and rejection penalty are mutually exclusive
     5. Allow re-completion (status can go back to COMPLETED)
     """
     assignment = await self._get_assignment(assignment_id)
@@ -669,14 +898,20 @@ async def reject_assignment(
             and assignment.penalty_amount > 0
             and penalty_behavior in ["ON_REJECTION", "ON_BOTH"]
             and not assignment.penalty_applied):
-        transaction = await self._apply_penalty(assignment, rejector_id)
+        effective_penalty = self._calculate_effective_penalty(assignment, is_escalating=False)
+        assignment.effective_penalty = effective_penalty
+        transaction = await self._apply_penalty(
+            assignment, 
+            rejector_id, 
+            amount=effective_penalty
+        )
         assignment.penalty_applied = True
     
     await self.db.commit()
     return assignment, transaction
 ```
 
-#### Expiration Workflow with Penalty
+#### Expiration Workflow with Escalating Penalty
 
 ```python
 async def expire_assignment(
@@ -684,9 +919,11 @@ async def expire_assignment(
     assignment_id: UUID
 ) -> tuple[ChoreAssignment, Transaction | None]:
     """
-    Mark an overdue assignment as expired and optionally apply penalty.
+    Mark an overdue assignment as expired and apply escalating penalty if configured.
     
     Called by background job when assignment exceeds expiration_days.
+    Escalating penalty formula:
+    penalty = min(penalty_amount + (penalty_per_overdue_day * total_overdue_days), max_penalty_amount)
     """
     assignment = await self._get_assignment(assignment_id)
     
@@ -704,16 +941,50 @@ async def expire_assignment(
             and assignment.penalty_amount > 0
             and penalty_behavior in ["ON_EXPIRATION", "ON_BOTH"]
             and not assignment.penalty_applied):
-        transaction = await self._apply_penalty(assignment, created_by_id=None)
+        # Calculate escalating penalty
+        effective_penalty = self._calculate_effective_penalty(assignment, is_escalating=True)
+        assignment.effective_penalty = effective_penalty
+        transaction = await self._apply_penalty(
+            assignment, 
+            created_by_id=None, 
+            amount=effective_penalty
+        )
         assignment.penalty_applied = True
     
     await self.db.commit()
     return assignment, transaction
 
+def _calculate_effective_penalty(
+    self,
+    assignment: ChoreAssignment,
+    is_escalating: bool = False
+) -> Decimal:
+    """
+    Calculate the actual penalty amount.
+    
+    For escalating penalties (on expiration):
+    penalty = min(base + (per_day * overdue_days), max)
+    """
+    base_penalty = assignment.penalty_amount or Decimal("0")
+    
+    if not is_escalating or not assignment.penalty_per_overdue_day:
+        return base_penalty
+    
+    escalation = assignment.penalty_per_overdue_day * assignment.total_overdue_days
+    total_penalty = base_penalty + escalation
+    
+    # Apply cap if configured
+    if assignment.max_penalty_amount:
+        total_penalty = min(total_penalty, assignment.max_penalty_amount)
+    
+    return total_penalty
+
 async def _apply_penalty(
     self, 
     assignment: ChoreAssignment, 
-    created_by_id: UUID | None
+    created_by_id: UUID | None,
+    amount: Decimal | None = None,
+    description_prefix: str = "Penalty"
 ) -> Transaction:
     """Debit penalty amount from child's account."""
     account = await self._get_default_account(
@@ -721,13 +992,15 @@ async def _apply_penalty(
         assignment.family_id
     )
     
+    penalty_amount = amount if amount is not None else assignment.penalty_amount
+    
     transaction_service = TransactionService(self.db)
     return await transaction_service.create_transaction(
         account_id=account.id,
-        amount=assignment.penalty_amount,
+        amount=penalty_amount,
         transaction_type=TransactionType.DEBIT,
         category=TransactionCategory.CHORE_PENALTY,
-        description=f"Penalty for: {assignment.chore.title}",
+        description=f"{description_prefix} for: {assignment.chore.title}",
         created_by_id=created_by_id,
         reference_id=assignment.id,
         reference_type="chore_assignment"
@@ -736,7 +1009,8 @@ async def _apply_penalty(
 async def _credit_reward(
     self, 
     assignment: ChoreAssignment, 
-    created_by_id: UUID
+    created_by_id: UUID,
+    amount: Decimal | None = None
 ) -> Transaction:
     """Credit reward amount to child's account."""
     account = await self._get_default_account(
@@ -744,13 +1018,16 @@ async def _credit_reward(
         assignment.family_id
     )
     
+    reward_amount = amount if amount is not None else assignment.reward_amount
+    tier_suffix = f" ({assignment.reward_tier})" if assignment.reward_tier else ""
+    
     transaction_service = TransactionService(self.db)
     return await transaction_service.create_transaction(
         account_id=account.id,
-        amount=assignment.reward_amount,
+        amount=reward_amount,
         transaction_type=TransactionType.CREDIT,
         category=TransactionCategory.CHORE_REWARD,
-        description=f"Reward for: {assignment.chore.title}",
+        description=f"Reward for: {assignment.chore.title}{tier_suffix}",
         created_by_id=created_by_id,
         reference_id=assignment.id,
         reference_type="chore_assignment"
@@ -762,14 +1039,57 @@ async def _credit_reward(
 - [ ] CRUD operations respect family isolation
 - [ ] Assignments generated correctly from recurrence rules
 - [ ] Completion workflow updates status appropriately
+- [ ] Completion calculates `completed_on_time` based on grace period
+- [ ] Completion determines `reward_tier` (FULL, REDUCED, BONUS, NONE)
+- [ ] Completion calculates `effective_reward` based on tier
+- [ ] Late penalty applied if completing past grace period (mutually exclusive with expiration)
+- [ ] Early bonus added to reward if completing before threshold
 - [ ] Completion can optionally credit reward immediately (credit_on_complete)
-- [ ] Approval workflow credits reward atomically (if not already credited)
+- [ ] Approval workflow credits `effective_reward` atomically (if not already credited)
 - [ ] Rejection workflow optionally applies penalty debit
-- [ ] Expiration workflow applies penalty if configured
+- [ ] Expiration workflow applies escalating penalty if configured
+- [ ] Escalating penalty formula: `min(base + (per_day × overdue_days), max)`
 - [ ] Penalties respect penalty_behavior configuration
 - [ ] Rewards and penalties are only applied once (tracked via flags)
 - [ ] Rejection allows re-completion
 - [ ] Overdue tracking calculated correctly
+
+---
+
+### Reward/Penalty Configuration Examples
+
+The following examples show common parent setups using Simple vs Advanced mode:
+
+| Scenario | Mode | Field Configuration |
+|----------|------|---------------------|
+| **Basic reward only** | Simple | `reward_amount=5.00`, `penalty_behavior=NONE` |
+| **Reward + penalty on skip** | Simple | `reward_amount=5.00`, `penalty_amount=2.00`, `penalty_behavior=ON_EXPIRATION` |
+| **Reward + penalty on rejection** | Simple | `reward_amount=5.00`, `penalty_amount=2.00`, `penalty_behavior=ON_REJECTION` |
+| **Neutral chore (tracking only)** | Simple | `reward_amount=null`, `penalty_behavior=NONE` |
+| **On-time full, late half** | Advanced | `reward_amount=5.00`, `grace_period_days=1`, `late_reward_percentage=50` |
+| **Strict deadline + penalty** | Advanced | `reward_amount=5.00`, `grace_period_days=0`, `grace_period_hours=0`, `penalty_amount=2.00`, `penalty_behavior=ON_EXPIRATION` |
+| **Early completion bonus** | Advanced | `reward_amount=5.00`, `early_bonus_amount=2.00`, `early_threshold_hours=24` |
+| **Escalating penalty** | Advanced | `penalty_amount=1.00`, `penalty_per_overdue_day=0.50`, `max_penalty_amount=5.00`, `penalty_behavior=ON_EXPIRATION` |
+| **Multi-tier complete** | Advanced | `reward_amount=5.00`, `grace_period_days=2`, `late_reward_percentage=50`, `penalty_amount=2.00`, `penalty_per_overdue_day=0.25`, `max_penalty_amount=5.00`, `penalty_behavior=ON_EXPIRATION` |
+| **No late completion allowed** | Advanced | `allow_late_completion=false`, `expiration_days=1`, `penalty_amount=2.00`, `penalty_behavior=ON_EXPIRATION` |
+
+#### Decision Tree: Which Tier Applies?
+
+```
+Completion received
+├── Is completion before (due_datetime - early_threshold_hours)?
+│   └── YES → BONUS tier (reward + early_bonus)
+│   └── NO ↓
+├── Is completion before due_datetime?
+│   └── YES → FULL tier (full reward)
+│   └── NO ↓
+├── Is grace_period configured?
+│   └── NO → FULL tier (any completion is "on-time")
+│   └── YES ↓
+├── Is completion within grace_period?
+│   └── YES → REDUCED tier (late_reward_percentage of reward)
+│   └── NO → REDUCED tier + late_penalty_amount (if configured)
+```
 
 ---
 
@@ -799,11 +1119,29 @@ class ChoreBase(BaseModel):
     """Base chore fields."""
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
-    reward_amount: Decimal | None = Field(default=None, ge=0, description="Credit on approval")
+    
+    # Reward configuration
+    reward_amount: Decimal | None = Field(default=None, ge=0, description="Full reward on approval")
     reward_type: Literal["money", "points", "stars"] = "money"
-    penalty_amount: Decimal | None = Field(default=None, ge=0, description="Debit on rejection/expiration")
-    penalty_behavior: Literal["NONE", "ON_REJECTION", "ON_EXPIRATION", "ON_BOTH"] = "NONE"
     credit_on_complete: bool = Field(default=False, description="Credit immediately on completion vs. on approval")
+    
+    # Tiered reward configuration (Advanced mode)
+    grace_period_days: int | None = Field(default=None, ge=0, description="Days after due date before 'late'")
+    grace_period_hours: int | None = Field(default=None, ge=0, description="Additional hours after grace days")
+    late_reward_percentage: int | None = Field(default=None, ge=0, le=100, description="Percentage of reward for late completion")
+    early_bonus_amount: Decimal | None = Field(default=None, ge=0, description="Extra reward for early completion")
+    early_threshold_hours: int | None = Field(default=None, ge=1, description="Hours before deadline for early bonus")
+    
+    # Penalty configuration
+    penalty_amount: Decimal | None = Field(default=None, ge=0, description="Base penalty on rejection/expiration")
+    penalty_behavior: Literal["NONE", "ON_REJECTION", "ON_EXPIRATION", "ON_BOTH"] = "NONE"
+    late_penalty_amount: Decimal | None = Field(default=None, ge=0, description="Penalty for late-but-valid completion")
+    
+    # Escalating penalty configuration (Advanced mode)
+    penalty_per_overdue_day: Decimal | None = Field(default=None, ge=0, description="Additional penalty per day overdue")
+    max_penalty_amount: Decimal | None = Field(default=None, ge=0, description="Cap on total penalty")
+    
+    # Assignment configuration
     assignment_type: Literal["ASSIGNED", "FIRST_DIBS"] = "ASSIGNED"
     deadline_time: time | None = None
     estimated_duration: int | None = Field(default=None, ge=1, description="Duration in minutes")
@@ -819,15 +1157,29 @@ class ChoreCreate(ChoreBase):
     assigned_to_user_ids: list[UUID] = Field(default_factory=list)
 
 class ChoreUpdate(BaseModel):
-    """Update chore request."""
+    """Update chore request. All reward/penalty fields updatable."""
     title: str | None = None
     description: str | None = None
     reward_amount: Decimal | None = None
+    reward_type: Literal["money", "points", "stars"] | None = None
+    credit_on_complete: bool | None = None
+    grace_period_days: int | None = None
+    grace_period_hours: int | None = None
+    late_reward_percentage: int | None = None
+    early_bonus_amount: Decimal | None = None
+    early_threshold_hours: int | None = None
+    penalty_amount: Decimal | None = None
+    penalty_behavior: Literal["NONE", "ON_REJECTION", "ON_EXPIRATION", "ON_BOTH"] | None = None
+    late_penalty_amount: Decimal | None = None
+    penalty_per_overdue_day: Decimal | None = None
+    max_penalty_amount: Decimal | None = None
     deadline_time: time | None = None
     estimated_duration: int | None = None
     require_photo: bool | None = None
     require_approval: bool | None = None
     auto_approve_after: int | None = None
+    allow_late_completion: bool | None = None
+    expiration_days: int | None = None
     is_active: bool | None = None
 
 class ChoreRead(ChoreBase):
@@ -845,7 +1197,7 @@ class ChoreRead(ChoreBase):
 
 # Assignment schemas
 class ChoreAssignmentRead(BaseModel):
-    """Chore assignment response."""
+    """Chore assignment response with tiered reward/penalty tracking."""
     id: UUID
     chore_id: UUID
     chore_title: str
@@ -856,11 +1208,21 @@ class ChoreAssignmentRead(BaseModel):
     due_time: time | None
     status: str
     total_overdue_days: int
+    
+    # Reward tracking
     reward_amount: Decimal | None
+    completed_on_time: bool | None
+    reward_tier: Literal["FULL", "REDUCED", "BONUS", "NONE"] | None
+    effective_reward: Decimal | None
+    reward_credited: bool
+    
+    # Penalty tracking
     penalty_amount: Decimal | None
     penalty_behavior: str
-    reward_credited: bool
+    effective_penalty: Decimal | None
     penalty_applied: bool
+    
+    # Timestamps
     completed_at: datetime | None
     approved_at: datetime | None
     rejected_at: datetime | None
@@ -966,7 +1328,7 @@ class AssignmentReject(BaseModel):
 #### ChoreCreatePage
 
 ```jsx
-// Create chore with advanced scheduling
+// Create chore with Simple/Advanced mode toggle
 <ChoreCreatePage>
   <PageHeader>
     <BackButton />
@@ -983,12 +1345,65 @@ class AssignmentReject(BaseModel):
       </Select>
     </Section>
     
-    {/* Reward */}
-    <Section title="Reward">
-      <Input name="rewardAmount" type="number" label="Amount" />
-      <Select name="rewardType" label="Type">
-        Money / Points / Stars
+    {/* Reward/Penalty Section with Simple/Advanced Toggle */}
+    <Section title="Reward & Penalty">
+      <ModeToggle 
+        value={advancedMode} 
+        onChange={setAdvancedMode}
+        labels={["Simple", "Advanced"]}
+      />
+      
+      {/* Simple Mode - Always visible */}
+      <Input name="rewardAmount" type="number" label="Reward Amount" prefix="$" />
+      <Input name="penaltyAmount" type="number" label="Penalty Amount" prefix="$" />
+      <Select name="penaltyBehavior" label="Apply Penalty When">
+        <Option value="NONE">Never</Option>
+        <Option value="ON_REJECTION">Chore is rejected</Option>
+        <Option value="ON_EXPIRATION">Chore expires incomplete</Option>
+        <Option value="ON_BOTH">Either rejection or expiration</Option>
       </Select>
+      
+      {/* Advanced Mode - Expanded fields */}
+      {advancedMode && (
+        <>
+          <Divider label="Grace Period" />
+          <div className="grid grid-cols-2 gap-4">
+            <Input name="gracePeriodDays" type="number" label="Days" min={0} />
+            <Input name="gracePeriodHours" type="number" label="Hours" min={0} />
+          </div>
+          <Help>Time after due date before completion is considered "late"</Help>
+          
+          <Divider label="Late Completion" />
+          <Input 
+            name="lateRewardPercentage" 
+            type="number" 
+            label="Late Reward %" 
+            min={0} max={100}
+            placeholder="e.g., 50 for half reward"
+          />
+          <Input 
+            name="latePenaltyAmount" 
+            type="number" 
+            label="Late Penalty" 
+            prefix="$"
+          />
+          <Help>Penalty applied when completing after grace period</Help>
+          
+          <Divider label="Early Completion Bonus" />
+          <div className="grid grid-cols-2 gap-4">
+            <Input name="earlyBonusAmount" type="number" label="Bonus Amount" prefix="$" />
+            <Input name="earlyThresholdHours" type="number" label="Hours Early" />
+          </div>
+          <Help>Extra reward if completed this many hours before deadline</Help>
+          
+          <Divider label="Escalating Penalties" />
+          <div className="grid grid-cols-2 gap-4">
+            <Input name="penaltyPerOverdueDay" type="number" label="Per Day Late" prefix="$" />
+            <Input name="maxPenaltyAmount" type="number" label="Maximum Penalty" prefix="$" />
+          </div>
+          <Help>Additional penalty per day overdue, capped at maximum</Help>
+        </>
+      )}
     </Section>
     
     {/* Schedule */}

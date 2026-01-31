@@ -225,6 +225,60 @@
 
 ---
 
+### Tiered Rewards (100% Coverage Required)
+
+| ID | Scenario | Input | Expected Result |
+|----|----------|-------|-----------------|
+| TRD-01 | FULL tier on-time completion | Complete before due_datetime | reward_tier = FULL, effective_reward = reward_amount |
+| TRD-02 | FULL tier no grace configured | grace_period_days = null, complete late | reward_tier = FULL (any completion is on-time) |
+| TRD-03 | REDUCED tier within grace | Complete within grace_period | reward_tier = REDUCED |
+| TRD-04 | REDUCED tier calculation | reward=10, late_reward_percentage=50 | effective_reward = 5.00 |
+| TRD-05 | BONUS tier early completion | Complete 24h before deadline | reward_tier = BONUS |
+| TRD-06 | BONUS tier calculation | reward=5, early_bonus=2 | effective_reward = 7.00 |
+| TRD-07 | Early threshold not met | Complete 12h early, threshold=24h | reward_tier = FULL (not early enough) |
+| TRD-08 | completed_on_time flag set | On-time completion | completed_on_time = True |
+| TRD-09 | completed_on_time false | Late completion | completed_on_time = False |
+| TRD-10 | effective_reward stored | Any completion | assignment.effective_reward populated |
+| TRD-11 | Transaction uses effective_reward | Approval | Transaction amount = effective_reward |
+
+### Grace Period Calculation (100% Coverage Required)
+
+| ID | Scenario | Input | Expected Result |
+|----|----------|-------|-----------------|
+| GRC-01 | Grace period days only | grace_period_days=2, complete 1 day late | Within grace, REDUCED tier |
+| GRC-02 | Grace period hours only | grace_period_hours=12, complete 6h late | Within grace, REDUCED tier |
+| GRC-03 | Grace period combined | days=1, hours=12, complete 36h late | Within grace (1.5 days < 1d+12h) |
+| GRC-04 | Beyond grace period | days=1, hours=0, complete 2 days late | Past grace, REDUCED tier + late_penalty |
+| GRC-05 | Zero grace strict deadline | days=0, hours=0, complete 1min late | Past grace immediately |
+| GRC-06 | Grace with due_time | due_time=17:00, grace=2h, complete 18:30 | Within grace |
+| GRC-07 | Grace respects timezone | Family timezone = PST | Calculation uses family timezone |
+
+### Late Penalty (100% Coverage Required)
+
+| ID | Scenario | Input | Expected Result |
+|----|----------|-------|-----------------|
+| LTP-01 | Late penalty on completion | late_penalty_amount=2, complete late | Balance debited $2 |
+| LTP-02 | No late penalty on-time | late_penalty_amount=2, complete on-time | No penalty |
+| LTP-03 | Late penalty description | Complete late | "Late completion penalty for: {title}" |
+| LTP-04 | Late penalty mutually exclusive | Complete late (penalty applied) | Expiration penalty NOT applied |
+| LTP-05 | Late penalty + reduced reward | Both configured | Reward reduced AND penalty applied |
+| LTP-06 | Late penalty flag set | Late penalty applied | penalty_applied = True |
+
+### Escalating Penalties (100% Coverage Required)
+
+| ID | Scenario | Input | Expected Result |
+|----|----------|-------|-----------------|
+| ESC-01 | Base penalty only | penalty_per_overdue_day=null, expire | effective_penalty = penalty_amount |
+| ESC-02 | Escalation 1 day | base=1, per_day=0.50, overdue=1 | effective_penalty = 1.50 |
+| ESC-03 | Escalation 5 days | base=1, per_day=0.50, overdue=5 | effective_penalty = 3.50 |
+| ESC-04 | Escalation with cap | base=1, per_day=0.50, max=2.00, overdue=10 | effective_penalty = 2.00 (capped) |
+| ESC-05 | No cap configured | max_penalty_amount=null, overdue=30 | Penalty grows unbounded |
+| ESC-06 | Escalation formula correct | base + (per_day × overdue_days) | Formula applied correctly |
+| ESC-07 | effective_penalty stored | Expiration with escalation | assignment.effective_penalty populated |
+| ESC-08 | Transaction uses effective_penalty | Expiration | Transaction amount = effective_penalty |
+
+---
+
 ### Penalty System (100% Coverage Required)
 
 | ID | Scenario | Input | Expected Result |
@@ -352,6 +406,31 @@
 | CP-13 | Start date required | Clear start date | Error shown |
 | CP-14 | Timing mode toggle | Select relative | timing_mode = "relative" |
 
+#### ChoreForm Simple/Advanced Mode
+
+| ID | Scenario | Action | Expected Result |
+|----|----------|--------|-----------------|
+| CP-SA-01 | Default to Simple mode | Open form | Only reward/penalty/behavior visible |
+| CP-SA-02 | Toggle to Advanced | Click Advanced toggle | Grace period fields appear |
+| CP-SA-03 | Advanced shows all fields | In Advanced mode | Early bonus, escalation visible |
+| CP-SA-04 | Toggle back to Simple | Click Simple toggle | Advanced fields hidden |
+| CP-SA-05 | Mode persists in localStorage | Toggle Advanced, refresh | Still in Advanced mode |
+| CP-SA-06 | Simple mode nulls advanced fields | Switch to Simple | grace_period_days = null in submission |
+| CP-SA-07 | Grace period validation | Enter negative days | Validation error |
+| CP-SA-08 | Late percentage 0-100 | Enter 150 | Validation error |
+| CP-SA-09 | Early threshold validation | Enter 0 | Validation error (must be >= 1) |
+| CP-SA-10 | Max penalty >= base penalty | max < base penalty | Warning displayed |
+
+#### ChoreAssignmentCard Tier Display
+
+| ID | Scenario | Action | Expected Result |
+|----|----------|--------|-----------------|
+| CP-TD-01 | Show BONUS tier badge | reward_tier = BONUS | "Early Bonus" badge displayed |
+| CP-TD-02 | Show REDUCED tier badge | reward_tier = REDUCED | "Late" badge displayed |
+| CP-TD-03 | Show effective reward | effective_reward set | Amount shows effective, not base |
+| CP-TD-04 | Show penalty applied indicator | penalty_applied = True | Penalty indicator visible |
+| CP-TD-05 | Show effective penalty amount | effective_penalty set | Shows escalated amount |
+
 #### PendingApprovalsPage
 
 | ID | Scenario | Action | Expected Result |
@@ -362,6 +441,15 @@
 | CP-18 | Reject opens modal | Click reject | Modal opens |
 | CP-19 | Reject requires reason | Submit empty reason | Validation error |
 | CP-20 | Batch approve button | Click approve all | All approved |
+
+#### PendingApprovalsPage Tier Info
+
+| ID | Scenario | Action | Expected Result |
+|----|----------|--------|-----------------|
+| CP-PA-01 | Show tier in approval card | REDUCED tier | "Late completion (50%)" displayed |
+| CP-PA-02 | Show effective reward in button | effective_reward=2.50 | "Approve ($2.50)" button text |
+| CP-PA-03 | Show penalty warning on reject | penalty configured | "This will debit $X" warning |
+| CP-PA-04 | Override penalty checkbox | In reject modal | "Apply penalty" checkbox (default checked) |
 
 ### E2E Tests (Playwright)
 
