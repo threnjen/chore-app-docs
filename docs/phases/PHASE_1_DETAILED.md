@@ -172,7 +172,7 @@ chore-app-frontend/
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
-| `db` | postgres:15 | 5432 | PostgreSQL database |
+| `db` | postgres:16 | 5432 | PostgreSQL database |
 | `api` | (build) | 8000 | FastAPI application |
 
 **Acceptance Criteria:**
