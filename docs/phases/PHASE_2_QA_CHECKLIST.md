@@ -170,12 +170,12 @@ ORDER BY t.created_at DESC LIMIT 10;
 
 ### View My Chores
 
-- [ ] Login as child user
-- [ ] Navigate to `/chores/my`
-- [ ] Verify "Today" section shows due chores
-- [ ] Verify "Overdue" section if any (with days count badge)
-- [ ] Verify "Upcoming" section shows future chores
-- [ ] Verify "Waiting" section shows pending approval
+- [x] Login as child user
+- [x] Navigate to `/chores/my`
+- [x] Verify "Today" section shows due chores
+- [x] Verify "Overdue" section if any (with days count badge)
+- [x] Verify "Upcoming" section shows future chores
+- [x] Verify "Waiting" section shows pending approval
 - [ ] Verify "Done" section shows approved
 
 ### Complete a Chore
@@ -207,10 +207,10 @@ ORDER BY t.created_at DESC LIMIT 10;
 
 - [x] Login as parent
 - [x] Navigate to `/chores/pending`
-- [ ] Verify completed chores appear
-- [ ] Shows child name and completion time
+- [x] Verify completed chores appear
+- [x] Shows child name and completion time
 - [ ] Shows chore title and reward amount
-- [ ] Empty state shows "No pending approvals" if none
+- [x] Empty state shows "No pending approvals" if none
 
 ### Tier Display in Approval Cards
 
