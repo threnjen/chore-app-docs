@@ -671,7 +671,7 @@ Located in `docs/phases/`:
 - Docker containerization
 
 **Frontend**
-- React 18+ with Vite 5+
+- React 19+ with Vite 5+
 - Tailwind CSS 3+ with Headless UI
 - React Router v6
 - React Context + Hooks for state

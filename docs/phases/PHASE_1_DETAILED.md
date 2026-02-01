@@ -30,7 +30,7 @@ Phase 1 establishes the foundation for PicklesApp: Docker-based local developmen
 - [ ] Docker Desktop installed and running
 - [ ] Git configured with SSH keys
 - [ ] VS Code with recommended extensions
-- [ ] Node.js 20+ (for frontend development outside Docker)
+- [ ] Node.js 24+ (for frontend development outside Docker)
 - [ ] Python 3.11+ (for backend development outside Docker)
 
 ### Windows Developers
@@ -472,7 +472,7 @@ class UserUpdate(BaseModel):
 
 **Acceptance Criteria:**
 
-- [ ] React 18 with StrictMode
+- [ ] React 19 with StrictMode
 - [ ] React Router v6 configured
 - [ ] Tailwind CSS working
 - [ ] Path aliases configured (@/)

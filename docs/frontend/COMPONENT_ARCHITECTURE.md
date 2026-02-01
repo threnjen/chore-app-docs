@@ -2,7 +2,7 @@
 
 ## Overview
 
-PicklesApp's frontend architecture follows a modular, reusable component design pattern built with React 18+. The architecture emphasizes:
+PicklesApp's frontend architecture follows a modular, reusable component design pattern built with React 19+. The architecture emphasizes:
 
 - **Age-adaptive rendering** for three child age brackets
 - **Component composition** over inheritance

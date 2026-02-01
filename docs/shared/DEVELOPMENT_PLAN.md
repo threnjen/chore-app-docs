@@ -39,7 +39,7 @@ PicklesApp is a family financial management platform that addresses critical pai
 
 ### Technical Approach
 - **Backend**: FastAPI (Python 3.11+) with async support
-- **Frontend**: React 18+ with Vite, Context + Hooks for state
+- **Frontend**: React 19+ with Vite, Context + Hooks for state
 - **Mobile**: PWA (Phase 7) → Native iOS/Android via Capacitor (Phase 10)
 - **Database**: PostgreSQL 15+ with native installation (not containerized)
 - **Containerization**: Docker for frontend/backend only
@@ -155,7 +155,7 @@ HTTP Client: httpx
 ### Frontend Stack
 ```yaml
 Build Tool: Vite 5+
-Framework: React 18+
+Framework: React 19+
 Language: JavaScript (with JSX)
 Routing: React Router v6
 State Management: React Context + Hooks

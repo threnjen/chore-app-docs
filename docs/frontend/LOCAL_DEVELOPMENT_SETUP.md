@@ -3,7 +3,7 @@
 ## Prerequisites
 - macOS (or Linux/Windows with adaptations)
 - Git
-- Node.js 20+
+- Node.js 24+
 - npm or yarn
 
 ## Node.js Installation
