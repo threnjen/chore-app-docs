@@ -23,6 +23,86 @@
 
 ---
 
+## 🗃️ Database Access (Backend Verification)
+
+### Quick Access Commands
+
+```bash
+# Connect to PostgreSQL CLI (interactive mode)
+docker-compose exec db psql -U picklesapp -d picklesapp
+
+# Run a single query and exit
+docker-compose exec db psql -U picklesapp -d picklesapp -c "SELECT * FROM users LIMIT 5;"
+
+# Pretty-print with expanded display
+docker-compose exec db psql -U picklesapp -d picklesapp -c "\x" -c "SELECT * FROM users WHERE email='test@test.com';"
+```
+
+### Useful psql Commands (inside psql shell)
+```sql
+\dt                    -- List all tables
+\d users               -- Describe users table (show columns)
+\d+ users              -- Describe with more detail
+\x                     -- Toggle expanded display (easier to read)
+\q                     -- Quit psql
+```
+
+### Common Verification Queries
+
+```sql
+-- View all users
+SELECT id, email, first_name, last_name, role, email_verified, created_at 
+FROM users ORDER BY created_at DESC;
+
+-- View a specific user by email
+SELECT * FROM users WHERE email = 'test@example.com';
+
+-- View all families
+SELECT id, name, timezone, created_at FROM families;
+
+-- View family memberships (who belongs to which family)
+SELECT fm.id, u.email, u.first_name, f.name as family_name, fm.role 
+FROM family_memberships fm
+JOIN users u ON fm.user_id = u.id
+JOIN families f ON fm.family_id = f.id;
+
+-- View join requests / invitations
+SELECT i.id, i.invitation_type, i.status, 
+       requester.email as requester_email,
+       target.email as target_email,
+       f.name as family_name,
+       i.message, i.created_at, i.expires_at
+FROM invitations i
+LEFT JOIN users requester ON i.requester_id = requester.id
+LEFT JOIN users target ON i.target_email = target.email
+LEFT JOIN families f ON i.family_id = f.id
+ORDER BY i.created_at DESC;
+
+-- View chores
+SELECT id, title, reward_amount, is_active, created_at 
+FROM chores ORDER BY created_at DESC;
+
+-- View chore assignments
+SELECT ca.id, c.title, u.first_name as assigned_to, ca.status, 
+       ca.due_date, ca.reward_tier, ca.effective_reward
+FROM chore_assignments ca
+JOIN chores c ON ca.chore_id = c.id
+LEFT JOIN users u ON ca.assigned_to_id = u.id
+ORDER BY ca.due_date DESC;
+
+-- View accounts
+SELECT a.id, u.first_name as owner, a.account_type, a.balance 
+FROM accounts a
+JOIN users u ON a.owner_id = u.id;
+
+-- View transactions
+SELECT t.id, t.amount, t.transaction_type, t.category, t.description, t.created_at
+FROM transactions t
+ORDER BY t.created_at DESC LIMIT 10;
+```
+
+---
+
 ## 🏠 Parent Chore Management
 
 ### Create Chore
@@ -79,10 +159,10 @@
 
 ### Delete Chore
 
-- [ ] Click "Delete" on a chore
-- [ ] Confirm deletion (with confirmation dialog)
-- [ ] Verify chore removed (soft-delete)
-- [ ] Verify with `include_inactive=true` query
+- [x] Click "Delete" on a chore
+- [x] Confirm deletion (with confirmation dialog)
+- [x] Verify chore removed (soft-delete)
+- [x] Verify with `include_inactive=true` query
 
 ---
 
@@ -123,10 +203,10 @@
 
 ## 👨‍👩‍👧 Parent Approval Workflow
 
-### View Pending Approvals
+### View Pending Approvalsswed
 
-- [ ] Login as parent
-- [ ] Navigate to `/chores/pending`
+- [x] Login as parent
+- [x] Navigate to `/chores/pending`
 - [ ] Verify completed chores appear
 - [ ] Shows child name and completion time
 - [ ] Shows chore title and reward amount
@@ -189,6 +269,22 @@
 - [ ] Approve
 - [ ] Verify $5 credited (50% of reward)
 
+**Backend Verification for Tiered Rewards**:
+```bash
+# Check assignment reward tier after completion
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT ca.id, c.title, ca.status, ca.reward_tier, ca.effective_reward, c.reward_amount
+   FROM chore_assignments ca
+   JOIN chores c ON ca.chore_id = c.id
+   ORDER BY ca.completed_at DESC NULLS LAST LIMIT 5;"
+# Expected: reward_tier=BONUS/FULL/REDUCED, effective_reward calculated
+
+# Check transaction amount matches effective_reward
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT t.amount, t.description FROM transactions t 
+   WHERE t.category='CHORE_REWARD' ORDER BY t.created_at DESC LIMIT 3;"
+```
+
 ---
 
 ## ⚠️ Penalty Testing
@@ -214,6 +310,36 @@
 - [ ] Let expire 10 days overdue
 - [ ] Verify effective_penalty = $5 (capped)
 
+**Backend Verification for Penalties**:
+```bash
+# Check chore penalty configuration
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT id, title, penalty_behavior, penalty_amount, penalty_per_day, max_penalty
+   FROM chores WHERE penalty_amount > 0;"
+
+# Check assignment status and penalty
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT ca.id, c.title, ca.status, ca.effective_penalty, ca.rejection_reason
+   FROM chore_assignments ca
+   JOIN chores c ON ca.chore_id = c.id
+   WHERE ca.status IN ('REJECTED', 'EXPIRED')
+   ORDER BY ca.updated_at DESC LIMIT 5;"
+
+# Check penalty transaction was created
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT t.amount, t.transaction_type, t.category, t.description 
+   FROM transactions t WHERE t.category='CHORE_PENALTY' 
+   ORDER BY t.created_at DESC LIMIT 3;"
+# Expected: transaction_type=DEBIT, category=CHORE_PENALTY
+
+# Manually trigger expire job (if needed)
+docker-compose exec api python -c "
+import asyncio
+from app.jobs.chore_jobs import expire_overdue_assignments
+asyncio.run(expire_overdue_assignments())
+"
+```
+
 ---
 
 ## 🔄 Recurrence Testing
@@ -223,6 +349,21 @@
 - [ ] Create daily chore
 - [ ] Verify assignments created for next 7 days
 - [ ] Preview shows consecutive days
+
+**Backend Verification for Recurrence**:
+```bash
+# Check chore recurrence rule
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT id, title, recurrence_rule FROM chores ORDER BY created_at DESC LIMIT 3;"
+
+# Check generated assignments
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT ca.due_date, ca.status, c.title
+   FROM chore_assignments ca
+   JOIN chores c ON ca.chore_id = c.id
+   WHERE c.title LIKE '%YOUR_CHORE_TITLE%'
+   ORDER BY ca.due_date LIMIT 10;"
+```
 
 ### Weekly M-W-F Pattern
 
@@ -283,6 +424,23 @@
 - [ ] Transaction shows "Chore Reward" category (CHORE_REWARD)
 - [ ] Transaction description includes chore title
 
+**Backend Verification**:
+```bash
+# Check transaction was created after approving a chore
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT t.id, t.amount, t.transaction_type, t.category, t.description, a.account_type
+   FROM transactions t
+   JOIN accounts a ON t.account_id = a.id
+   ORDER BY t.created_at DESC LIMIT 5;"
+# Expected: transaction_type=CREDIT, category=CHORE_REWARD
+
+# Check account balance updated
+docker-compose exec db psql -U picklesapp -d picklesapp -c \
+  "SELECT u.first_name, a.account_type, a.balance 
+   FROM accounts a JOIN users u ON a.owner_id = u.id
+   WHERE u.email='CHILD_EMAIL';"
+```
+
 ---
 
 ## ⚡ Edge Cases
@@ -317,11 +475,21 @@
   - [ ] Verify success message appears
   - [ ] Verify "Your family has been created!" message
   - [ ] Verify "Please check your email to verify" message
-- [ ] **Backend Verification**:
-  - [ ] User created with `role=PARENT`, `email_verified=false`
-  - [ ] Family created with name "{LastName} Family"
-  - [ ] User added as family OWNER
-  - [ ] Verification email logged to console
+- [ ] **Backend Verification** (run in terminal):
+  ```bash
+  # Check user was created with correct role
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, email, first_name, last_name, role, email_verified FROM users WHERE email='YOUR_EMAIL';"
+  # Expected: role=PARENT, email_verified=false
+  
+  # Check family was created
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT f.id, f.name, fm.role FROM families f 
+     JOIN family_memberships fm ON f.id = fm.family_id 
+     JOIN users u ON fm.user_id = u.id WHERE u.email='YOUR_EMAIL';"
+  # Expected: Family named "{LastName} Family", role=OWNER
+  ```
+  - [ ] Check Docker logs for verification email: `docker-compose logs api | grep -i "verification"`
 
 ### Test Scenario 2: Adult Registration (Join Existing Family)
 
@@ -335,11 +503,28 @@
   - [ ] Click "Send Request"
 - [ ] **Success Screen**:
   - [ ] Verify "Your request to join has been sent" message
-- [ ] **Backend Verification**:
-  - [ ] User created with `role=PARENT`, `email_verified=false`
-  - [ ] Join request created with `status=PENDING`, `invitation_type=JOIN_REQUEST`
-  - [ ] Notification email to target parent logged to console
-  - [ ] User NOT added to family yet
+- [ ] **Backend Verification** (run in terminal):
+  ```bash
+  # Check user was created
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, email, role, email_verified FROM users WHERE email='YOUR_EMAIL';"
+  # Expected: role=PARENT, email_verified=false
+  
+  # Check join request was created
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT i.id, i.invitation_type, i.status, i.target_email, i.message
+     FROM invitations i 
+     JOIN users u ON i.requester_id = u.id 
+     WHERE u.email='YOUR_EMAIL';"
+  # Expected: invitation_type=JOIN_REQUEST, status=PENDING
+  
+  # Check user NOT in any family yet
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT fm.* FROM family_memberships fm 
+     JOIN users u ON fm.user_id = u.id WHERE u.email='YOUR_EMAIL';"
+  # Expected: 0 rows
+  ```
+  - [ ] Check Docker logs: `docker-compose logs api | grep -i "join request"`
 
 ### Test Scenario 3: Child Registration (Request to Join Parent)
 
@@ -355,26 +540,48 @@
   - [ ] Click "Send Request"
 - [ ] **Success Screen**:
   - [ ] Verify "We've sent a request to your parent" message
-- [ ] **Backend Verification**:
-  - [ ] User created with `role=CHILD`, `email_verified=false`
-  - [ ] Join request created linking to parent's family
-  - [ ] Notification email to parent logged
-  - [ ] Child NOT added to family yet
+- [ ] **Backend Verification** (run in terminal):
+  ```bash
+  # Check child user was created
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, email, role, email_verified FROM users WHERE email='CHILD_EMAIL';"
+  # Expected: role=CHILD, email_verified=false
+  
+  # Check join request links to parent's family
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT i.id, i.invitation_type, i.status, i.target_email, f.name as family_name
+     FROM invitations i 
+     LEFT JOIN families f ON i.family_id = f.id
+     JOIN users u ON i.requester_id = u.id 
+     WHERE u.email='CHILD_EMAIL';"
+  # Expected: invitation_type=JOIN_REQUEST, status=PENDING, family linked
+  
+  # Check child NOT in family yet
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT * FROM family_memberships fm 
+     JOIN users u ON fm.user_id = u.id WHERE u.email='CHILD_EMAIL';"
+  # Expected: 0 rows
+  ```
 
 ### Test Scenario 4: Email Verification Flow
 
 **Goal**: Verify email verification works and returns tokens.
 
-- [ ] Find verification token from console logs
+- [ ] Find verification token from Docker logs:
+  ```bash
+  docker-compose logs api | grep -i "verification" | tail -5
+  ```
 - [ ] Navigate to `http://localhost:5173/verify-email/<TOKEN>`
 - [ ] **Verification Page**:
   - [ ] Verify "Verifying your email..." spinner
   - [ ] Verify "Email Verified!" success message
   - [ ] Verify automatic redirect to dashboard
 - [ ] **Backend Verification**:
-  - [ ] User's `email_verified` set to `true`
-  - [ ] `email_verification_token` set to `null`
-  - [ ] Access and refresh tokens returned
+  ```bash
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT email, email_verified, email_verification_token FROM users WHERE email='YOUR_EMAIL';"
+  # Expected: email_verified=true, email_verification_token=NULL
+  ```
 
 ### Test Scenario 5: Parent Reviews Join Requests
 
@@ -391,9 +598,21 @@
   - [ ] Click "Approve" button
   - [ ] If child email not verified: Verify error message about email verification
   - [ ] If child email verified: Verify success message
-- [ ] **Verify Member Added**:
-  - [ ] Navigate to Family Members page
-  - [ ] Verify new member appears in member list
+- [ ] **Backend Verification**:
+  ```bash
+  # Check invitation status updated
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, status, reviewed_at FROM invitations 
+     WHERE requester_id = (SELECT id FROM users WHERE email='REQUESTER_EMAIL');"
+  # Expected: status=ACCEPTED
+  
+  # Check user added to family
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT fm.role, f.name FROM family_memberships fm
+     JOIN families f ON fm.family_id = f.id
+     JOIN users u ON fm.user_id = u.id WHERE u.email='REQUESTER_EMAIL';"
+  # Expected: 1 row showing family membership
+  ```
 
 ### Test Scenario 6: Parent Rejects Join Request
 
@@ -403,34 +622,64 @@
 - [ ] Verify success message
 - [ ] Verify request removed from list
 - [ ] **Backend Verification**:
-  - [ ] Join request status changed to `REJECTED`
-  - [ ] Rejection email sent to requester (logged)
+  ```bash
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, status, reviewed_at FROM invitations 
+     WHERE requester_id = (SELECT id FROM users WHERE email='REQUESTER_EMAIL');"
+  # Expected: status=REJECTED
+  ```
+  - [ ] Check rejection email logged: `docker-compose logs api | grep -i "reject"`
 
 ### Test Scenario 7: Child with Unregistered Parent Email
 
 **Goal**: Verify registration invitation sent when parent email doesn't exist.
 
-- [ ] Register as child with parent email that doesn't exist
+- [ ] Register as child with parent email that doesn't exist (e.g., `newparent@test.com`)
 - [ ] **Backend Verification**:
-  - [ ] Child account created
-  - [ ] Registration invitation email sent to parent email (logged)
-  - [ ] Join request created with `family_id=null` (no family yet)
-  - [ ] Message indicates parent will be invited
+  ```bash
+  # Child account created
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, email, role FROM users WHERE email='CHILD_EMAIL';"
+  
+  # Join request created with NULL family_id
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id, family_id, target_email, status FROM invitations 
+     WHERE requester_id = (SELECT id FROM users WHERE email='CHILD_EMAIL');"
+  # Expected: family_id=NULL, target_email='newparent@test.com'
+  ```
+  - [ ] Check invitation email: `docker-compose logs api | grep -i "invite"`
 
 ### Test Scenario 8: Resend Verification Email
 
 - [ ] Register a new user but don't verify email
-- [ ] Hit resend verification API or UI button
-- [ ] Verify new verification token generated
-- [ ] Verify new verification email sent (logged)
+- [ ] Call resend API:
+  ```bash
+  curl -X POST http://localhost:8000/auth/resend-verification \
+    -H "Content-Type: application/json" \
+    -d '{"email": "YOUR_EMAIL"}'
+  ```
+- [ ] Verify new token in logs: `docker-compose logs api | grep -i "verification" | tail -3`
 - [ ] Response always says "If email registered..." (security)
 
 ### Test Scenario 9: Cancel Join Request
 
 - [ ] Login as user with pending join request
-- [ ] Cancel the join request (via API)
-- [ ] Verify join request deleted
-- [ ] Verify request no longer appears in parent's list
+- [ ] Cancel via API:
+  ```bash
+  # Get your join request ID first
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT id FROM invitations WHERE requester_id = (SELECT id FROM users WHERE email='YOUR_EMAIL');"
+  
+  # Cancel it (need auth token)
+  curl -X DELETE http://localhost:8000/join-requests/<REQUEST_ID> \
+    -H "Authorization: Bearer YOUR_TOKEN"
+  ```
+- [ ] Verify deleted:
+  ```bash
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT * FROM invitations WHERE id='REQUEST_ID';"
+  # Expected: 0 rows
+  ```
 
 ### Test Scenario 10: Edge Cases
 
@@ -438,6 +687,11 @@
 - [ ] **10b**: Register with existing email → 400 error "Email already registered"
 - [ ] **10c**: Verify with invalid token → Error page "Invalid or expired token"
 - [ ] **10d**: Approve unverified user → 400 error explaining child must verify first
+  ```bash
+  # Check if user is verified before approving
+  docker-compose exec db psql -U picklesapp -d picklesapp -c \
+    "SELECT email, email_verified FROM users WHERE email='CHILD_EMAIL';"
+  ```
 - [ ] **10e**: Review already-reviewed request → 400 error
 - [ ] **10f**: Cancel non-pending request → 400 error
 
