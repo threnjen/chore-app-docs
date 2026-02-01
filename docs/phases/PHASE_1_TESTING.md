@@ -243,7 +243,7 @@
 - [x] Database migrated (`docker-compose exec api alembic upgrade head`)
 - [x] Load seed data in backed (`docker-compose exec api python scripts/seed_dev_data.py`)
 - [x] Frontend started (`npm run dev`) http://localhost:5173/
-- [ ] Seed data loaded (optional)
+- [x] Seed data loaded (optional)
 
 ### Resetting
 - `docker-compose down -v`

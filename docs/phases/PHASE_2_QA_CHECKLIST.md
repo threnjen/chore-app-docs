@@ -8,12 +8,18 @@
 
 ## Prerequisites
 
-- [ ] Docker Desktop running
-- [ ] Backend: `docker-compose up` or `uvicorn app.main:app --reload`
-- [ ] Frontend: `npm run dev` (in chore-app-frontend)
-- [ ] Database migrated: `alembic upgrade head`
-- [ ] Seed data loaded: `python scripts/seed_dev_data.py`
-- [ ] DEV_MODE enabled (emails logged to console, not sent)
+- Docker Desktop running
+- Backend: `docker-compose up` or `uvicorn app.main:app --reload`
+- Database migrated: `docker-compose exec api alembic upgrade head`
+- Seed data loaded: `docker-compose exec api python scripts/seed_dev_data.py`
+- Frontend: `npm run dev` (in chore-app-frontend)
+- DEV_MODE enabled (emails logged to console, not sent)
+- Run QA on page http://localhost:5173/
+ 
+### Resetting
+- `docker-compose down -v`
+- `docker-compose up -d`
+- `docker-compose exec api python scripts/seed_dev_data.py`
 
 ---
 
@@ -21,55 +27,55 @@
 
 ### Create Chore
 
-- [ ] Navigate to `/chores` from sidebar
-- [ ] Click "New Chore" button
-- [ ] **Form Fields**:
-  - [ ] Enter title "Test Daily Chore"
-  - [ ] Enter description "Test description"
-  - [ ] Set reward amount $5.00
-  - [ ] Select child to assign to
-  - [ ] Select frequency "Daily"
-  - [ ] Verify weekday picker hidden for Daily
-  - [ ] Select frequency "Weekly"
-  - [ ] Verify weekday picker appears
-  - [ ] Select M-W-F
-  - [ ] Can set interval (every 2 weeks)
-  - [ ] Can toggle between Absolute and Relative timing mode
-  - [ ] Verify preview shows next 5 occurrences correctly
-  - [ ] Set deadline time (optional)
-  - [ ] Set estimated duration (optional)
-  - [ ] Toggle "Require Photo"
-  - [ ] Toggle "Require Approval"
-  - [ ] Set auto-approve after hours (optional)
-  - [ ] Toggle "Show Advanced" mode
-  - [ ] Set grace period (1 day)
-  - [ ] Set late reward percentage (50%)
-  - [ ] Set early bonus ($1.00)
-  - [ ] Set penalty behavior (On Expiration)
-  - [ ] Set penalty amount ($1.00)
-- [ ] Submit form
-- [ ] Verify redirect to `/chores`
-- [ ] Verify chore appears in list
-- [ ] Verify initial assignments generated (check via API or database)
+- [x] Navigate to `/chores` from sidebar
+- [x] Click "New Chore" button
+- [x] **Form Fields**:
+  - [x] Enter title "Test Daily Chore"
+  - [x] Enter description "Test description"
+  - [x] Set reward amount $5.00
+  - [x] Select child to assign to
+  - [x] Select frequency "Daily"
+  - [x] Verify weekday picker hidden for Daily
+  - [x] Select frequency "Weekly"
+  - [x] Verify weekday picker appears
+  - [x] Select M-W-F
+  - [x] Can set interval (every 2 weeks)
+  - [x] Can toggle between Absolute and Relative timing mode
+  - [x] Verify preview shows next 5 occurrences correctly
+  - [x] Set deadline time (optional)
+  - [x] Set estimated duration (optional)
+  - [x] Toggle "Require Photo"
+  - [x] Toggle "Require Approval"
+  - [x] Set auto-approve after hours (optional)
+  - [x] Toggle "Show Advanced" mode
+  - [x] Set grace period (1 day)
+  - [x] Set late reward percentage (50%)
+  - [x] Set early bonus ($1.00)
+  - [x] Set penalty behavior (On Expiration)
+  - [x] Set penalty amount ($1.00)
+- [x] Submit form
+- [x] Verify redirect to `/chores`
+- [x] Verify chore appears in list
+- [x] Verify initial assignments generated (check via API or database)
 
 ### List Chores
 
-- [ ] Verify all chores display correctly
-- [ ] Verify reward badges show correctly
-- [ ] Verify penalty badges (if configured)
-- [ ] Verify recurrence pattern descriptions
-- [ ] Verify assignment count displays
-- [ ] Can filter by active/inactive
-- [ ] Can click to view chore details
+- [x] Verify all chores display correctly
+- [x] Verify reward badges show correctly
+- [x] Verify penalty badges (if configured)
+- [x] Verify recurrence pattern descriptions
+- [x] Verify assignment count displays
+- [x] Can filter by active/inactive
+- [x] Can click to view chore details
 
 ### View/Edit Chore
 
-- [ ] Click on a chore to view details
-- [ ] Verify `/chores/{id}` page loads
-- [ ] Click "Edit" button
-- [ ] Modify title
-- [ ] Save changes
-- [ ] Verify update reflected
+- [x] Click on a chore to view details
+- [x] Verify `/chores/{id}` page loads
+- [x] Click "Edit" button
+- [x] Modify title
+- [x] Save changes
+- [x] Verify update reflected
 
 ### Delete Chore
 
