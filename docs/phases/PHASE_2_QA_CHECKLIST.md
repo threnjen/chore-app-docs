@@ -287,7 +287,8 @@
 
 ## ⚡ Edge Cases
 
-- [ ] Child cannot access `/chores` page (parent only)
+- [ ] Child CAN view `/chores` page but cannot see "New Chore" button
+- [ ] Child cannot access `/chores/create` (shows Access Denied)
 - [ ] Child cannot approve/reject chores
 - [ ] Cannot complete future chores (disabled button)
 - [ ] Cannot complete already approved chores
