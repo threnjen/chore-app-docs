@@ -15,12 +15,13 @@
 7. [Chore Scheduling System](#chore-scheduling-system)
 8. [Age-Adaptive UI System](#age-adaptive-ui-system)
 9. [Development Phases](#development-phases)
-10. [Local Development Setup](#local-development-setup)
-11. [AWS Deployment Architecture](#aws-deployment-architecture)
-12. [Security Framework](#security-framework)
-13. [Testing Strategy](#testing-strategy)
-14. [Cost Management](#cost-management)
-15. [Business Model](#business-model)
+10. [Mobile App Strategy](#mobile-app-strategy)
+11. [Local Development Setup](#local-development-setup)
+12. [AWS Deployment Architecture](#aws-deployment-architecture)
+13. [Security Framework](#security-framework)
+14. [Testing Strategy](#testing-strategy)
+15. [Cost Management](#cost-management)
+16. [Business Model](#business-model)
 
 ---
 
@@ -39,10 +40,11 @@ PicklesApp is a family financial management platform that addresses critical pai
 ### Technical Approach
 - **Backend**: FastAPI (Python 3.11+) with async support
 - **Frontend**: React 18+ with Vite, Context + Hooks for state
+- **Mobile**: PWA (Phase 7) → Native iOS/Android via Capacitor (Phase 10)
 - **Database**: PostgreSQL 15+ with native installation (not containerized)
 - **Containerization**: Docker for frontend/backend only
 - **Deployment**: AWS Lightsail (POC), scaling to ECS/RDS (production)
-- **Timeline**: 9 phases over ~20 weeks to production-ready
+- **Timeline**: 10 phases over ~24 weeks to production-ready (including native mobile apps)
 
 ---
 
@@ -51,12 +53,12 @@ PicklesApp is a family financial management platform that addresses critical pai
 ### High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         Client Layer                         │
-├──────────────────────┬──────────────────────────────────────┤
-│   Desktop Web App    │        Mobile Web App (PWA)          │
-│   (React + Vite)     │     (Age-Adaptive Components)        │
-└──────────────────────┴──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Client Layer                                    │
+├───────────────────┬─────────────────────────┬───────────────────────────────┤
+│  Desktop Web App  │   Mobile Web App (PWA)  │  Native Mobile Apps (Phase 10)│
+│  (React + Vite)   │ (Age-Adaptive, Offline) │  (Capacitor + iOS/Android)    │
+└───────────────────┴─────────────────────────┴───────────────────────────────┘
                               ↓ HTTPS/WSS
 ┌─────────────────────────────────────────────────────────────┐
 │                      API Gateway Layer                       │
@@ -1534,6 +1536,134 @@ PARENTING_PRESETS = {
 - [ ] Monitoring/alerting working
 - [ ] Documentation complete
 - [ ] Support system ready
+
+---
+
+### Phase 10: Native Mobile Apps (3-4 weeks)
+
+> **Prerequisite**: Requires Phase 9 completion. PWA must be production-stable before wrapping in native shell.
+
+**Goals:**
+- Native iOS and Android apps via Capacitor
+- Native push notifications (FCM/APNs)
+- App Store / Google Play presence
+- Enhanced native device capabilities
+
+**Deliverables:**
+1. **Capacitor Integration**
+   - Capacitor project setup wrapping existing React app
+   - iOS Xcode project configuration
+   - Android Studio project configuration
+   - Native splash screens and app icons
+   - Deep linking configuration
+
+2. **Backend - Push Notification Service**
+   - Device registration endpoints (`POST /api/v1/devices/register`)
+   - Firebase Cloud Messaging (FCM) integration for Android
+   - Apple Push Notification service (APNs) integration for iOS
+   - Unified notification service abstraction
+   - Platform-specific payload formatting
+   - Device token management (registration, refresh, deregistration)
+
+3. **Frontend - Native Plugins**
+   - `@capacitor/push-notifications` - Native push notifications
+   - `@capacitor/camera` - Photo evidence for chores
+   - `@capacitor/haptics` - Haptic feedback for interactions
+   - `@capacitor/app` - App lifecycle management
+   - `@capacitor/splash-screen` - Native splash screen
+   - `@capacitor/status-bar` - Status bar customization
+
+4. **App Store Deployment**
+   - Apple Developer account setup
+   - Google Play Developer account setup
+   - App Store Connect configuration
+   - Google Play Console configuration
+   - Privacy policy and terms of service (app store versions)
+   - App review compliance (both platforms)
+   - Beta testing via TestFlight / Internal Testing Track
+
+5. **Features**
+   - Native push notifications with rich content
+   - Badge counts on app icon
+   - Notification actions (approve/reject from notification)
+   - Camera access for chore photo evidence
+   - Haptic feedback for completions/celebrations
+   - Biometric authentication (Face ID / Touch ID / Fingerprint)
+   - Background app refresh
+   - Offline-first with native storage
+
+**Database Changes:**
+```sql
+-- Device registration table
+CREATE TABLE device_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_token TEXT NOT NULL,
+    platform VARCHAR(10) NOT NULL CHECK (platform IN ('ios', 'android', 'web')),
+    device_name VARCHAR(255),
+    app_version VARCHAR(20),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, device_token)
+);
+
+CREATE INDEX idx_device_tokens_user ON device_tokens(user_id);
+CREATE INDEX idx_device_tokens_platform ON device_tokens(platform);
+```
+
+**New Backend Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/devices/register` | POST | Register device for push notifications |
+| `/api/v1/devices` | GET | List user's registered devices |
+| `/api/v1/devices/{device_id}` | DELETE | Unregister a device |
+| `/api/v1/notifications/preferences` | GET/PUT | User notification preferences |
+
+**Notification Types:**
+| Type | Trigger | Platforms |
+|------|---------|-----------|
+| `chore_reminder` | X hours before due | iOS, Android, Web |
+| `chore_overdue` | Chore past due date | iOS, Android, Web |
+| `chore_completed` | Child completes chore (to parent) | iOS, Android, Web |
+| `chore_approved` | Parent approves (to child) | iOS, Android, Web |
+| `chore_rejected` | Parent rejects (to child) | iOS, Android, Web |
+| `allowance_received` | Scheduled allowance paid | iOS, Android, Web |
+| `goal_reached` | Savings goal achieved | iOS, Android, Web |
+| `age_bracket_change` | Birthday triggers new UI | iOS, Android, Web |
+
+**Testing:**
+- Native app build verification (iOS Simulator, Android Emulator)
+- Push notification delivery tests
+- Deep link navigation tests
+- Camera permission and photo upload tests
+- Biometric authentication tests
+- App store review compliance tests
+- Performance testing on actual devices
+
+**Documentation:**
+- Native app build guide (iOS/Android)
+- Push notification setup guide
+- App store submission checklist
+- CI/CD for native builds (Fastlane)
+
+**Cost Considerations:**
+- Apple Developer Program: $99/year
+- Google Play Developer: $25 one-time
+- Firebase (free tier sufficient for POC)
+- APNs: included with Apple Developer Program
+
+---
+
+## Mobile App Strategy
+
+See `docs/frontend/MOBILE_APP_STRATEGY.md` for comprehensive mobile strategy including:
+- PWA vs Native comparison
+- Capacitor architecture details
+- Push notification implementation
+- App store deployment guides
+- Future native-only features
 
 ---
 

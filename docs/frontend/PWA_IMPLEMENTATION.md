@@ -4,6 +4,20 @@
 
 PicklesApp is built as a Progressive Web App (PWA) to provide a native app-like experience on mobile devices while maintaining a single codebase. The PWA implementation enables offline functionality, home screen installation, and background sync capabilities.
 
+> **Mobile Strategy Note**: PWA is **Phase 7** of development and serves as the foundation for mobile experience. In **Phase 10**, we will wrap this same React codebase with **Capacitor** to create native iOS and Android apps for App Store/Google Play distribution with full push notification support. See [MOBILE_APP_STRATEGY.md](./MOBILE_APP_STRATEGY.md) for the complete mobile roadmap.
+
+### PWA vs Native App Comparison
+
+| Feature | PWA (Phase 7) | Native App (Phase 10) |
+|---------|---------------|----------------------|
+| Distribution | Browser / Add to Home | App Store / Google Play |
+| Push Notifications | Web Push (limited iOS) | Full APNs/FCM |
+| Offline Support | ✅ Service Worker | ✅ Native + SW |
+| App Icon Badge | ❌ | ✅ |
+| Camera Access | ✅ | ✅ (better UX) |
+| Biometric Auth | ⚠️ WebAuthn | ✅ Face ID/Touch ID |
+| Code Reuse | 100% | 95%+ (Capacitor) |
+
 ## Table of Contents
 1. [PWA Architecture](#pwa-architecture)
 2. [Service Worker Setup](#service-worker-setup)
@@ -14,6 +28,7 @@ PicklesApp is built as a Progressive Web App (PWA) to provide a native app-like 
 7. [Update Notifications](#update-notifications)
 8. [Offline Indicators](#offline-indicators)
 9. [Testing PWA Features](#testing-pwa-features)
+10. [Native App Transition (Phase 10)](#native-app-transition-phase-10)
 
 ---
 
@@ -1099,6 +1114,106 @@ describe('Service Worker', () => {
 
 ---
 
+## Native App Transition (Phase 10)
+
+The PWA implementation in this document is designed to be **forward-compatible** with our Phase 10 native app strategy using Capacitor.
+
+### What Changes in Phase 10
+
+| Component | PWA (Current) | Native App (Phase 10) |
+|-----------|---------------|----------------------|
+| Push Notifications | Web Push API + VAPID | Capacitor Push Notifications (FCM/APNs) |
+| Storage | IndexedDB + Cache API | Same + Capacitor Preferences |
+| Camera | MediaDevices API | Capacitor Camera Plugin |
+| Offline Detection | `navigator.onLine` | Same (works in Capacitor) |
+| Background Sync | Service Worker | Same + Native Background Fetch |
+
+### Code Patterns That Enable Easy Transition
+
+The following patterns used in our PWA implementation are specifically chosen to make the Capacitor transition seamless:
+
+#### 1. Platform-Agnostic Service Layer
+
+```javascript
+// services/api.js - Works unchanged in Capacitor
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+});
+
+export default api;
+```
+
+#### 2. Abstracted Push Notification Service
+
+```javascript
+// services/pushNotifications.js
+// This abstraction makes it easy to swap implementations
+
+export async function requestNotificationPermission() {
+  // Phase 7: Web Push
+  if ('Notification' in window) {
+    return Notification.requestPermission();
+  }
+  
+  // Phase 10: Will add Capacitor check here
+  // if (Capacitor.isNativePlatform()) {
+  //   return PushNotifications.requestPermissions();
+  // }
+}
+```
+
+#### 3. Offline-First Data Hooks
+
+```javascript
+// hooks/useOfflineData.js
+// IndexedDB storage works in both PWA and Capacitor
+import { openDB } from 'idb';
+
+// This code runs unchanged in Capacitor
+export function useOfflineChores() {
+  // ... implementation
+}
+```
+
+### Preparing for Phase 10
+
+When implementing PWA features, keep these guidelines in mind:
+
+1. **Avoid Web-Only APIs Without Fallbacks**
+   - Always check for API availability before use
+   - Provide graceful degradation
+
+2. **Use Environment Variables for Configuration**
+   - Don't hardcode URLs or keys
+   - Capacitor can use the same `.env` files
+
+3. **Keep Push Notification Logic Isolated**
+   - All notification code in `services/pushNotifications.js`
+   - Easy to swap for Capacitor plugin in Phase 10
+
+4. **Test Responsive Design on Multiple Screen Sizes**
+   - Native apps will use the same responsive components
+   - Test on 320px (small phones) to 428px (large phones)
+
+### Migration Checklist for Phase 10
+
+When we begin Phase 10 native app development:
+
+- [ ] Install Capacitor core and plugins
+- [ ] Run `npx cap init` to initialize projects
+- [ ] Update push notification service for native
+- [ ] Add native splash screens and icons
+- [ ] Configure deep linking
+- [ ] Test on iOS Simulator and Android Emulator
+- [ ] Set up Firebase for FCM (Android + iOS)
+- [ ] Configure APNs certificates (iOS)
+
+For complete Phase 10 implementation details, see [MOBILE_APP_STRATEGY.md](./MOBILE_APP_STRATEGY.md).
+
+---
+
 ## Troubleshooting
 
 ### Service Worker Not Updating
@@ -1145,4 +1260,4 @@ navigator.serviceWorker.getRegistration().then((registration) => {
 
 ---
 
-*Last Updated: January 29, 2026*
+*Last Updated: February 1, 2026*
