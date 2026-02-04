@@ -136,62 +136,62 @@ ORDER BY t.created_at DESC LIMIT 10;
 
 ### Create Chore
 
-- [ ] Navigate to `/chores` from sidebar
-- [ ] Click "New Chore" button
-- [ ] **Form Fields**:
-  - [ ] Enter title "Test Daily Chore"
-  - [ ] Enter description "Test description"
-  - [ ] Set reward amount $5.00
-  - [ ] Select child to assign to
-  - [ ] Select frequency "Daily"
-  - [ ] Verify weekday picker hidden for Daily
-  - [ ] Select frequency "Weekly"
-  - [ ] Verify weekday picker appears
-  - [ ] Select M-W-F
-  - [ ] Can set interval (every 2 weeks)
-  - [ ] Can toggle between Absolute and Relative timing mode
-  - [ ] Verify preview shows next 5 occurrences correctly
-  - [ ] Set deadline time (optional)
-  - [ ] Set estimated duration (optional)
-  - [ ] Toggle "Require Photo"
-  - [ ] Toggle "Require Approval"
-  - [ ] Set auto-approve after hours (optional)
-  - [ ] Toggle "Show Advanced" mode
-  - [ ] Set grace period (1 day)
-  - [ ] Set late reward percentage (50%)
-  - [ ] Set early bonus ($1.00)
-  - [ ] Set penalty behavior (On Expiration)
-  - [ ] Set penalty amount ($1.00)
-- [ ] Submit form
-- [ ] Verify redirect to `/chores`
-- [ ] Verify chore appears in list
-- [ ] Verify initial assignments generated (check via API or database)
+- [x] Navigate to `/chores` from sidebar
+- [x] Click "New Chore" button
+- [x] **Form Fields**:
+  - [x] Enter title "Test Daily Chore"
+  - [x] Enter description "Test description"
+  - [x] Set reward amount $5.00
+  - [x] Select child to assign to
+  - [x] Select frequency "Daily"
+  - [x] Verify weekday picker hidden for Daily
+  - [x] Select frequency "Weekly"
+  - [x] Verify weekday picker appears
+  - [x] Select M-W-F
+  - [x] Can set interval (every 2 weeks)
+  - [x] Can toggle between Absolute and Relative timing mode
+  - [x] Verify preview shows next 5 occurrences correctly
+  - [x] Set deadline time (optional)
+  - [x] Set estimated duration (optional)
+  - [x] Toggle "Require Photo"
+  - [x] Toggle "Require Approval"
+  - [x] Set auto-approve after hours (optional)
+  - [x] Toggle "Show Advanced" mode
+  - [x] Set grace period (1 day)
+  - [x] Set late reward percentage (50%)
+  - [x] Set early bonus ($1.00)
+  - [x] Set penalty behavior (On Expiration)
+  - [x] Set penalty amount ($1.00)
+- [x] Submit form
+- [x] Verify redirect to `/chores`
+- [x] Verify chore appears in list
+- [x] Verify initial assignments generated (check via API or database)
 
 ### List Chores
 
-- [ ] Verify all chores display correctly
-- [ ] Verify reward badges show correctly
-- [ ] Verify penalty badges (if configured)
-- [ ] Verify recurrence pattern descriptions
-- [ ] Verify assignment count displays
-- [ ] Can filter by active/inactive
-- [ ] Can click to view chore details
+- [x] Verify all chores display correctly
+- [x] Verify reward badges show correctly
+- [x] Verify penalty badges (if configured)
+- [x] Verify recurrence pattern descriptions
+- [x] Verify assignment count displays
+- [x] Can filter by active/inactive
+- [x] Can click to view chore details
 
 ### View/Edit Chore
 
-- [ ] Click on a chore to view details
-- [ ] Verify `/chores/{id}` page loads
-- [ ] Click "Edit" button
-- [ ] Modify title
-- [ ] Save changes
-- [ ] Verify update reflected
+- [x] Click on a chore to view details
+- [x] Verify `/chores/{id}` page loads
+- [x] Click "Edit" button
+- [x] Modify title
+- [x] Save changes
+- [x] Verify update reflected
 
 ### Delete Chore
 
-- [ ] Click "Delete" on a chore
-- [ ] Confirm deletion (with confirmation dialog)
-- [ ] Verify chore removed (soft-delete)
-- [ ] Verify with `include_inactive=true` query
+- [x] Click "Delete" on a chore
+- [x] Confirm deletion (with confirmation dialog)
+- [x] Verify chore removed (soft-delete)
+- [x] Verify with `include_inactive=true` query
 
 ---
 
@@ -199,37 +199,29 @@ ORDER BY t.created_at DESC LIMIT 10;
 
 ### View My Chores
 
-- [ ] Login as child user (child1@test.com)
-- [ ] Navigate to `/chores/my`
-- [ ] Verify "Today" section shows due chores
-- [ ] Verify "Overdue" section if any (with days count badge)
-- [ ] Verify "Upcoming" section shows future chores
-- [ ] Verify "Waiting" section shows pending approval
-- [ ] Verify "Done" section shows approved
+- [x] Login as child user (child1@test.com)
+- [x] Navigate to `/chores/my`
+- [x] Verify "Today" section shows due chores
+- [x] Verify "Overdue" section if any (with days count badge)
+- [x] Verify "Upcoming" section shows future chores
+- [x] Verify "Waiting" section shows pending approval
+- [x] Verify "Done" section shows approved
+- [x] Verify "Rejected" section shows Try Again
 
 ### Complete a Chore (ASSIGNED type)
 
-- [ ] Find a PENDING chore assigned directly to child
-- [ ] Click "Done"/"Complete" button
-- [ ] Completion confirmation shown
-- [ ] Verify status changes to "Waiting for Approval" (if require_approval=true)
-- [ ] Verify chore moved to appropriate section
-
-### Claim and Complete a Chore (FIRST_DIBS type)
-
-- [ ] Login as child (any)
-- [ ] Find an AVAILABLE chore (assignment_type=FIRST_DIBS)
-- [ ] Click "Claim" button
-- [ ] Verify status changes to CLAIMED
-- [ ] Complete the claimed chore
-- [ ] Verify status changes to PENDING_APPROVAL or APPROVED
+- [x] Find a PENDING chore assigned directly to child
+- [x] Click "Done"/"Complete" button
+- [x] Completion confirmation shown
+- [x] Verify status changes to "Waiting for Approval" (if require_approval=true)
+- [x] Verify chore moved to appropriate section
 
 ### Complete Overdue Chore
 
-- [ ] Find or create an overdue chore
-- [ ] Verify overdue badge displays (shows days count)
-- [ ] Complete the chore
-- [ ] Verify `reward_tier` is REDUCED (if grace configured)
+- [x] Find or create an overdue chore
+- [x] Verify overdue badge displays (shows days count)
+- [x] Complete the chore
+- [x] Verify `reward_tier` is REDUCED (if grace configured)
 
 ### Complete Early
 
@@ -239,10 +231,10 @@ ORDER BY t.created_at DESC LIMIT 10;
 
 ### Auto-Approve Flow
 
-- [ ] Find chore with auto_approve_hours set (e.g., 24 hours)
-- [ ] Complete the chore
-- [ ] Verify status shows PENDING_APPROVAL
-- [ ] Wait for auto-approve job (or trigger manually):
+- [x] Find chore with auto_approve_hours set (e.g., 24 hours)
+- [x] Complete the chore
+- [x] Verify status shows PENDING_APPROVAL
+- [x] Wait for auto-approve job (or trigger manually):
   ```bash
   docker-compose exec api python -c "
   import asyncio
@@ -260,6 +252,11 @@ ORDER BY t.created_at DESC LIMIT 10;
 - [ ] Verify error message about photo requirement
 - [ ] Complete with photo URL
 - [ ] Verify success
+
+### Rejected Chore
+
+- [ ] Find chore with Rejected Status
+- [ ] Press "Try Again" button
 
 ---
 
@@ -543,34 +540,6 @@ docker-compose exec db psql -U picklesapp -d picklesapp -c \
 - [ ] Verify assigned children see chore in their list
 - [ ] Verify non-assigned children do NOT see chore
 
-### FIRST_DIBS Type (Claimable)
-
-- [ ] Create chore with assignment_type=FIRST_DIBS
-- [ ] Verify assignment created with status=AVAILABLE
-- [ ] Verify all eligible children can see the chore
-- [ ] **Child A Claims**:
-  - [ ] Login as first child
-  - [ ] Click "Claim" on available chore
-  - [ ] Verify status changes to CLAIMED
-  - [ ] Verify chore assigned to this child
-- [ ] **Child B Cannot Claim**:
-  - [ ] Login as different child
-  - [ ] Verify chore no longer shows as claimable
-  - [ ] Verify chore shows "Claimed by [Child A]" or hidden
-
-**Backend Verification for FIRST_DIBS**:
-```bash
-# Check assignment status transitions
-docker-compose exec db psql -U picklesapp -d picklesapp -c \
-  "SELECT ca.id, c.title, ca.status, ca.assigned_to_id, u.first_name
-   FROM chore_assignments ca
-   JOIN chores c ON ca.chore_id = c.id
-   LEFT JOIN users u ON ca.assigned_to_id = u.id
-   WHERE c.assignment_type='FIRST_DIBS'
-   ORDER BY ca.created_at DESC LIMIT 5;"
-# Expected: status=AVAILABLE (unclaimed) or CLAIMED (after claim)
-```
-
 ---
 
 ## 👨‍👩‍👧‍👦 Multi-Household Testing
@@ -656,16 +625,6 @@ Verify each status is correctly handled in the system:
 - [ ] Verify assignment status = PENDING
 - [ ] Verify child sees in "Upcoming" section
 
-### AVAILABLE (First-dibs, unclaimed)
-- [ ] Create FIRST_DIBS chore
-- [ ] Verify assignment status = AVAILABLE
-- [ ] Verify multiple children can see it as claimable
-
-### CLAIMED (First-dibs, claimed by child)
-- [ ] Child claims AVAILABLE assignment
-- [ ] Verify status changes to CLAIMED
-- [ ] Verify assigned_to_id is set
-
 ### COMPLETED (Child marked done, auto-approved)
 - [ ] Complete chore with require_approval=false
 - [ ] Verify status = COMPLETED (skips PENDING_APPROVAL)
@@ -742,11 +701,6 @@ docker-compose exec db psql -U picklesapp -d picklesapp -c \
 - [ ] Verify existing pending assignments handled
 - [ ] Verify chore hidden from child view
 - [ ] Verify parent can see with `include_inactive=true`
-
-### Concurrent Claim (FIRST_DIBS race condition)
-- [ ] Two children try to claim same FIRST_DIBS chore
-- [ ] Verify only one succeeds
-- [ ] Verify second gets clear error message
 
 ---
 
@@ -1244,7 +1198,6 @@ npm run test:e2e -- --grep "Create simple daily chore"
 |------|--------|------|--------|
 | Parent Chore Management | | | ⬜ |
 | Child Chore Workflow | | | ⬜ |
-| FIRST_DIBS Claiming | | | ⬜ |
 | Parent Approval Workflow | | | ⬜ |
 | Tiered Rewards | | | ⬜ |
 | Reward Types (MONEY/POINTS/STARS) | | | ⬜ |
