@@ -1,101 +1,138 @@
-#### Tests
-Write tests BEFORE implementation
-Confirm tests fail (avoid mock implementations)
-Commit tests separately
-Implement until tests pass
-Do NOT modify tests during implementation
-Implement your plan and make sure your new tests pass.
-Always run tests to make sure you didn't break anything else.
-Always run prettier on newly created files.
-Always run turbo typecheck lint.
+# Agent Guidelines
 
-#### Hooks
-Use hooks to enforce quality automatically:
+## Principles
 
-TypeScript/linter checks after every edit
-Build validation before commits
-Test execution on file changes
-Formatting automation (though see caveat below)
-Hook Example (from 6_months_hardcore_use):
+- Incremental progress over big bangs — small changes that compile and pass tests
+- Learn from existing code — find 3 similar features, study patterns before implementing
+- Pragmatic over dogmatic — adapt to project reality
+- Clear intent over clever code — be boring and obvious
+- Single responsibility per function/class
+- Composition over inheritance; interfaces over singletons
+- Explicit data flow; fail fast with descriptive errors
+- Include context for debugging; handle errors at appropriate level; never silently swallow exceptions
+- If you need to explain it, it's too complex
 
-// Stop hook: Runs when Claude finishes responding
-1. Read edit logs to find modified repos
-2. Run build scripts on each affected repo
-3. Check for TypeScript errors
-4. If <5 errors: Show them to Claude
-5. If ≥5 errors: Recommend auto-error-resolver agent
-6. Log everything
+## Plan Mode Rules
 
-#### Self Review
+- **NEVER** output code blocks in Plan mode
+- Describe changes for someone else to execute later
+- If you catch yourself writing implementation, **STOP**
+- Link to files and reference `symbols`, don't show code
+- Ask to move to Agent mode when planning is complete, before attempting to write files
 
-review your own code using subagents or fresh context
-Have one Claude write, another review (fresh context = better critique)
+## Process
 
-What to Look For:
+### Implementation Flow
+1. **Plan** — study existing patterns.
+2. **Test** — write test first (red)
+3. **Implement** — minimal code to pass (green)
+4. **Refactor** — clean up with tests passing
+5. **Commit** — pause, present staged files and suggested commit message, wait for user to review and commit
 
-Spaghetti code (hard to follow logic)
-Substantial API/backend changes
-Unnecessary imports, functions, comments
-Missing error handling
-Security vulnerabilities
+### When Stuck (Max 3 Attempts)
+1. Document what failed (steps, errors, hypothesis)
+2. Research 2-3 alternative implementations
+3. Question fundamentals — simpler approach? different abstraction?
+4. Try different angle — then STOP and reassess
 
-#### Commits
+## Testing
 
-Commit early and often with meaningful messages
+### TDD Workflow
+- Write tests BEFORE implementation; confirm they fail first.
+- Run full suite to catch regressions.
+- SHOULD NOT add test unless it can fail for a real defect.
+- Strong assertions (`toEqual` over `toBeGreaterThanOrEqual`)
+- One assertion per test; group under `describe(functionName)`
 
-Use Conventional Commits format
-Each commit should compile and pass tests
-Avoid references to “Claude” or “AI-generated” in messages
-Commit in stages tied to plan/task checkpoints
-Example from Building_AI_Factory:
+### When Requirements Change
+- Udpate/delete affected tests FIRST, then change code
+- Stale tests (for removed behavior) should be deleted, not skipped
+- Deprecated functions: remove tests entirely or update to test new stub behavior
+- If unsure whether a test is stale: check if the requirement still exists
 
-"One important instruction is to have claude write commits
-as it goes for each task step. This way either claude or I
-can revert to a previous state if something goes wrong."
+## Quality Standards
 
-#### Context Clearing
+### Every Commit Must
+- [ ] Compile successfully
+- [ ] Pass all tests (new functionality included)
+- [ ] Follow project formatting/linting
+- [ ] Have clear commit message (Conventional Commits)
+- [ ] No TODOs without issue numbers
+- [ ] Check plan is up-to-date before commit
 
-Clear at 60k tokens or 30% context (don’t wait for limits)
-Use /clear + /catchup pattern for simple restart
-Use “Document & Clear” for complex tasks
-Document & Clear Pattern:
+### Always
+- Pause at commit points — present staged files + suggested commit message, then wait
+- Never run `git commit` or `git push` on behalf of the user
 
-Have Claude write progress to .md file
-/clear the context
-Start fresh session reading the .md file
-Continue work
+### Never
+- Use `--no-verify` to bypass hooks
+- Disable tests instead of fixing them
+- Commit code that doesn't compile
+- Reference "Claude" or "AI-generated" in messages
 
-#### Documentation Systems
+### Decision Priority
+Testability → Readability → Consistency → Simplicity → Reversibility
 
-Dev Docs System (from 6_months_hardcore_use, Design_Partner, Building_AI_Factory):
+## Agent Operations
 
-The Three-File Pattern:
+### Context Clearing
+Clear at 60k tokens or 30% context:
+1. Write progress to `.md` file
+2. `/clear` the context
+3. Start fresh session reading the `.md` file
 
-~/docs/[task-name]/
-├── [task-name]-plan.md      # The accepted plan
+### Subagents
+- Main agent spawns Task(...) clones for parallel work
+- Fresh context = better critique for self-review
+- Review for: spaghetti code, API changes, missing error handling, security issues
+
+### Self-Review Checklist
+- [ ] Logic easy to follow?
+- [ ] No unnecessary imports/functions/comments?
+- [ ] Error handling complete?
+- [ ] Security vulnerabilities addressed?
+
+## Task Documentation
+
+### Three-File Pattern
+```
+dev/active/[task-name]/
+├── [task-name]-plan.md      # Accepted plan with stages
 ├── [task-name]-context.md   # Key files, decisions
 └── [task-name]-tasks.md     # Checklist of work
+```
 
-Living Document Approach (from Design_Partner):
+### Plan Template
+```markdown
+## Stage N: [Name]
+**Goal**: [Specific deliverable]
+**Success Criteria**: [Testable outcomes]
+**Status**: [Not Started|In Progress|Complete]
+```
 
-Update plan during implementation
-Plan documents reveal changed requirements
-Check plan is up-to-date before each commit
+### Workflow
+- Create task directory when starting large work
+- Update status immediately as tasks complete
+- Check `/dev/active/` for existing tasks before starting
+- Read all three files before proceeding with existing task
+- Remove plan file when all stages done
 
-#### Explore, Plan, Code, Commit
-Explore: Read relevant files, images, URLs (explicitly tell it NOT to code yet)
-Plan: Use subagents to verify details, create plan with “think” mode
-Code: Implement with explicit verification steps
-Commit: Update READMEs/changelogs, create PR
+## Environment
 
-#### Specification Documents
+This project uses **pipenv**. All Python and pytest commands must be prefixed with `pipenv run`, e.g.:
+- `pipenv run python main.py`
+- `pipenv run pytest`
+- `pipenv run python -m py_compile ...`
 
-Write clear specs before starting
+## Extended Guides
 
-#### Subagents
-
-- Let main agent use Task(...) to spawn clones of itself
-- Agent manages own orchestration dynamically
-- Avoids gatekeeping context
-
-
+Load when applicable:
+- *Architecture Overview* -> `../.planning/codebase/ARCHITECTURE.md` - When onboarding to the project, locating modules/symbols, or understanding data flow and key patterns
+- *Codebase Structure* -> `../.planning/codebase/STRUCTURE.md` - When looking for file locations, directory layout, or where to add new modules
+- *Conventions* -> `../.planning/codebase/CONVENTIONS.md` - When following naming patterns, import ordering, or step-module conventions
+- *Style Guide* -> `../.planning/codebase/STYLE_GUIDE.md` - When writing new modules, creating classes, or unfamiliar with project code style
+- *Testing Patterns* -> `../.planning/codebase/TESTING.md` - When writing or updating tests, configuring pytest, or understanding test infrastructure
+- *Integrations* -> `../.planning/codebase/INTEGRATIONS.md` - When working with external APIs (Airbnb, OpenAI, Weaviate, S3) or understanding auth/client patterns
+- *Technology Stack* -> `../.planning/codebase/STACK.md` - When checking language versions, dependencies, or tooling choices
+- *Concerns* -> `../.planning/codebase/CONCERNS.md` - When triaging tech debt, known issues, or reviewing open risks
+- *Phase Planning* -> `../.planning/codebase/PLANNING_WORKFLOW.md` - For migrations or multi-stage projects spanning multiple commits
